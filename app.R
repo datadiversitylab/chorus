@@ -653,7 +653,7 @@ ui <- fluidPage(
                                                         tags$div(class = "div"),
                                                         DTOutput("admin_table"),
                                                         tags$p(style="font-size:.8rem;color:var(--ink-light);margin-top:.6rem;",
-                                                               "Click the 🗑 button next to any answer to delete it.")
+                                                               "Click the delete button next to any answer to delete it.")
                                                ),
 
                                                # Top X
@@ -1052,7 +1052,7 @@ server <- function(input, output, session) {
         del_btns <- sapply(seq_len(nrow(r_ord)), function(i) {
             aid <- r_ord$ID[i]
             sprintf('<button class="vbtn vbtn-del" title="Delete this answer"
-        onclick="Shiny.setInputValue(\'delete_answer_action\',{aid:%d,qid:\'%s\'},{priority:\'event\'})">🗑</button>',
+        onclick="Shiny.setInputValue(\'delete_answer_action\',{aid:%d,qid:\'%s\'},{priority:\'event\'})">Delete</button>',
                     aid, qid)
         })
         out <- data.frame(
