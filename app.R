@@ -523,7 +523,7 @@ ui <- fluidPage(
     tags$div(class = "chorus-wrap",
 
              tags$div(class = "hero",
-                      tags$div(class = "eyebrow", "Participative · Live · Democratic"),
+                      tags$div(class = "eyebrow", "Participative · Live"),
                       tags$h1(class = "hero-title", "Every voice", tags$br(), tags$em("counts."))
              ),
 
