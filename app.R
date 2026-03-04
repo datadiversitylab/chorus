@@ -481,7 +481,12 @@ input[type="checkbox"]{accent-color:var(--sage);transform:scale(1.2);}
 # UI
 # ============================================================================
 ui <- fluidPage(
-  tags$head(tags$style(HTML(chorus_css))),
+  tags$head(tags$style(HTML(chorus_css)),
+            tags$script(
+              src = "TBD",
+              `data-website-id` = "TBD",
+              defer = NA
+            )),
   
   # TOP BAR
   tags$div(class = "topbar",
