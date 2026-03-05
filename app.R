@@ -1,9 +1,6 @@
 library(shiny)
 library(DT)
 
-# ============================================================================
-# GLOBAL STORE
-# ============================================================================
 store <- new.env(parent = emptyenv())
 store$conferences   <- new.env(parent = emptyenv())
 store$tokens        <- new.env(parent = emptyenv())
@@ -17,7 +14,6 @@ store$vote_ledger   <- new.env(parent = emptyenv())
 
 `%||%` <- function(a, b) if (!is.null(a)) a else b
 
-# ── trigger helpers ──────────────────────────────────────────────────────────
 get_trigger <- function(cid) {
   if (!exists(cid, envir = store$conf_triggers, inherits = FALSE))
     assign(cid, reactiveVal(0L), envir = store$conf_triggers)
@@ -31,7 +27,6 @@ get_kick_trig <- function(sid) {
   get(sid, envir = store$kick_triggers, inherits = FALSE)
 }
 
-# ── conference helpers ───────────────────────────────────────────────────────
 get_conf <- function(cid) {
   if (!exists(cid, envir = store$conferences, inherits = FALSE)) return(NULL)
   get(cid, envir = store$conferences, inherits = FALSE)
@@ -48,6 +43,7 @@ init_conf <- function(cid, admin_key) {
   )
   e$admin_key    <- admin_key
   e$forced_qid   <- NULL
+  e$room_closed  <- FALSE
   assign(cid,       e,         envir = store$conferences)
   assign(cid,       0L,        envir = store$user_counts)
   assign(cid,       list(),    envir = store$activity_log)
@@ -56,16 +52,14 @@ init_conf <- function(cid, admin_key) {
   invisible(e)
 }
 
-# ── activity helpers ─────────────────────────────────────────────────────────
-add_activity <- function(cid, msg, msg_anon = NULL) {
+add_activity <- function(cid, msg, msg_anon = NULL, admin_only = FALSE) {
   if (!exists(cid, envir = store$activity_log, inherits = FALSE)) return()
   log <- get(cid, envir = store$activity_log, inherits = FALSE)
-  log <- c(list(list(msg = msg, msg_anon = msg_anon, ts = format(Sys.time(), "%H:%M"))), log)
+  log <- c(list(list(msg = msg, msg_anon = msg_anon, admin_only = admin_only, ts = format(Sys.time(), "%H:%M"))), log)
   if (length(log) > 60) log <- log[seq_len(60)]
   assign(cid, log, envir = store$activity_log)
 }
 
-# ── guest registry ───────────────────────────────────────────────────────────
 register_guest <- function(cid, sid, name) {
   gl <- get(cid, envir = store$guests, inherits = FALSE)
   gl[[sid]] <- list(name = name, kicked = FALSE)
@@ -88,7 +82,6 @@ list_guests <- function(cid) {
   get(cid, envir = store$guests, inherits = FALSE)
 }
 
-# ── vote ledger helpers ──────────────────────────────────────────────────────
 ledger_key  <- function(cid, sid, qid) paste(cid, sid, qid, sep = "|")
 
 get_votes_for <- function(cid, sid, qid) {
@@ -131,11 +124,9 @@ refund_answer_votes <- function(cid, qid, aid_char) {
   refunds
 }
 
-# ── vote-limit helpers ───────────────────────────────────────────────────────
 within_total_limit <- function(total_cast, max_total) is.infinite(max_total) || total_cast < max_total
 within_q_limit     <- function(q_cast,     max_per_q) is.infinite(max_per_q)  || q_cast  < max_per_q
 
-# ── timer UI helper ──────────────────────────────────────────────────────────
 make_timer_ui <- function(q, admin = FALSE) {
   active  <- isTRUE(q$timer_active)
   has_end <- !is.null(q$timer_end)
@@ -164,9 +155,6 @@ make_timer_ui <- function(q, admin = FALSE) {
   } else NULL
 }
 
-# ============================================================================
-# CSS
-# ============================================================================
 chorus_css <- '
 @import url("https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;0,9..144,800;1,9..144,300;1,9..144,600&family=Figtree:wght@300;400;500;600;700&display=swap");
 
@@ -507,15 +495,54 @@ input[type="checkbox"]{accent-color:var(--sage);transform:scale(1.2);}
 .answer-card.blind-mode .vote-count{display:none;}
 .answer-card.blind-mode .answer-bar-bg{display:none!important;}
 .answer-card.blind-mode .answer-meta .vote-pct{display:none;}
+
+/* ── MY VOTE COUNT (always visible) ── */
+.my-vote-count{font-family:"Fraunces",serif;font-size:.82rem;font-weight:700;
+  color:var(--sage-d);background:var(--sage-mist);border:1px solid var(--sage-pale);
+  border-radius:var(--r-pill);padding:.15rem .55rem;min-width:1.6rem;text-align:center;}
+
+/* ── ROOM CLOSED SCREEN ── */
+.closed-screen{text-align:center;padding:4rem 2rem;animation:fadeUp .4s ease both;}
+.closed-icon{font-size:3rem;margin-bottom:1rem;}
+.closed-title{font-family:"Fraunces",serif;font-size:1.8rem;font-weight:700;
+  color:var(--ink);margin-bottom:.5rem;}
+.closed-sub{font-size:1rem;color:var(--ink-light);font-weight:300;}
+.btn-close-room{background:var(--red-mist)!important;color:var(--red-soft)!important;
+  border:1.5px solid rgba(192,84,74,.3)!important;}
+.btn-close-room:hover{background:rgba(192,84,74,.18)!important;}
 '
 
-# ============================================================================
-# UI
-# ============================================================================
 ui <- fluidPage(
-  tags$head(tags$style(HTML(chorus_css))),
+  tags$head(
+    tags$style(HTML(chorus_css)),
+    tags$script(HTML("
+$(document).on('shiny:value', function(e) {
+  if (e.name === 'guest_answer_section' || e.name === 'guest_suggest_lock_ui' ||
+      e.name === 'question_ui_guest' || e.name === 'guest_vote_budget_ui' ||
+      e.name === 'guest_timer_ui' || e.name === 'guest_mode_badges_ui') {
+    var el = document.getElementById('answer_text');
+    if (el) { el._savedVal = el.value; }
+  }
+  if (e.name === 'question_ui_admin' || e.name === 'lock_toggle_ui') {
+    var el2 = document.getElementById('admin_answer_text');
+    if (el2) { el2._savedVal = el2.value; }
+  }
+});
+$(document).on('shiny:visualchange', function(e) {
+  var el = document.getElementById('answer_text');
+  if (el && el._savedVal !== undefined && el.value !== el._savedVal) {
+    el.value = el._savedVal;
+    el._savedVal = undefined;
+  }
+  var el2 = document.getElementById('admin_answer_text');
+  if (el2 && el2._savedVal !== undefined && el2.value !== el2._savedVal) {
+    el2.value = el2._savedVal;
+    el2._savedVal = undefined;
+  }
+});
+    "))
+  ),
   
-  # TOP BAR
   tags$div(class = "topbar",
            tags$div(class = "brand",
                     tags$span(class = "brand-name", "Chorus"),
@@ -537,7 +564,6 @@ ui <- fluidPage(
                     tags$h1(class = "hero-title", "Every voice", tags$br(), tags$em("counts."))
            ),
            
-           # ── GUEST PANEL ──────────────────────────────────────────────────────────
            conditionalPanel("input.user_role == 'Guest'",
                             
                             conditionalPanel("!output.validGuestConf",
@@ -557,38 +583,49 @@ ui <- fluidPage(
                             ),
                             
                             conditionalPanel("output.validGuestConf",
-                                             uiOutput("kicked_ui"),
-                                             conditionalPanel("!output.isKicked",
-                                                              uiOutput("guest_name_badge_ui"),
-                                                              # Self-rename
-                                                              tags$div(class = "pcard",
-                                                                       tags$div(class = "sec-eye", "Your identity"),
-                                                                       tags$div(class = "self-rename-row",
-                                                                                textInput("self_rename_input", NULL, placeholder = "Change your display name..."),
-                                                                                actionButton("self_rename_btn", "Update", class = "btn btn-ghost btn-sm",
-                                                                                             style = "margin-bottom:1rem;")
-                                                                       )
-                                                              ),
-                                                              uiOutput("user_count_ui_guest"),
-                                                              tags$div(class = "pcard",
-                                                                       tags$div(class = "sec-eye", "Active Question"),
-                                                                       uiOutput("question_ui_guest"),
-                                                                       uiOutput("guest_mode_badges_ui"),
-                                                                       uiOutput("guest_timer_ui"),
-                                                                       tags$div(class = "div"),
-                                                                       uiOutput("guest_vote_budget_ui"),
-                                                                       uiOutput("guest_answer_section")
-                                                              ),
-                                                              tags$div(class = "pcard",
-                                                                       tags$div(class = "sec-eye", "Live Activity"),
-                                                                       tags$div(class = "pcard-title", style = "margin-bottom:.75rem;", "What's happening"),
-                                                                       uiOutput("activity_feed_guest")
+                                             uiOutput("room_closed_ui"),
+                                             conditionalPanel("!output.isRoomClosed",
+                                                              uiOutput("kicked_ui"),
+                                                              conditionalPanel("!output.isKicked",
+                                                                               uiOutput("guest_name_badge_ui"),
+                                                                               tags$div(class = "pcard",
+                                                                                        tags$div(class = "sec-eye", "Your identity"),
+                                                                                        tags$div(class = "self-rename-row",
+                                                                                                 textInput("self_rename_input", NULL, placeholder = "Change your display name..."),
+                                                                                                 actionButton("self_rename_btn", "Update", class = "btn btn-ghost btn-sm",
+                                                                                                              style = "margin-bottom:1rem;")
+                                                                                        )
+                                                                               ),
+                                                                               uiOutput("user_count_ui_guest"),
+                                                                               tags$div(class = "pcard",
+                                                                                        tags$div(class = "sec-eye", "Active Question"),
+                                                                                        uiOutput("question_ui_guest"),
+                                                                                        uiOutput("guest_mode_badges_ui"),
+                                                                                        uiOutput("guest_timer_ui"),
+                                                                                        tags$div(class = "div"),
+                                                                                        uiOutput("guest_vote_budget_ui"),
+                                                                                        uiOutput("guest_suggest_lock_ui"),
+                                                                                        tags$div(id = "answer_input_wrap",
+                                                                                                 tags$div(class="sec-eye", "Suggest an answer"),
+                                                                                                 tags$div(style="display:flex;gap:.75rem;align-items:flex-end;",
+                                                                                                          tags$div(style="flex:1;",
+                                                                                                                   textInput("answer_text", NULL, placeholder="Type your answer...")),
+                                                                                                          actionButton("submit_answer", "Submit", class="btn btn-sage",
+                                                                                                                       style="margin-bottom:1rem;flex-shrink:0;")
+                                                                                                 )
+                                                                                        ),
+                                                                                        uiOutput("guest_answer_section")
+                                                                               ),
+                                                                               tags$div(class = "pcard",
+                                                                                        tags$div(class = "sec-eye", "Live Activity"),
+                                                                                        tags$div(class = "pcard-title", style = "margin-bottom:.75rem;", "What's happening"),
+                                                                                        uiOutput("activity_feed_guest")
+                                                                               )
                                                               )
                                              )
                             )
            ),
            
-           # ── ADMIN PANEL ──────────────────────────────────────────────────────────
            conditionalPanel("input.user_role == 'Admin'",
                             
                             conditionalPanel("!output.isAdmin",
@@ -611,8 +648,9 @@ ui <- fluidPage(
                             conditionalPanel("output.isAdmin",
                                              uiOutput("admin_token_display"),
                                              uiOutput("user_count_ui"),
-                                             
-                                             # Force question panel
+                                             tags$div(style="margin-bottom:1.4rem;display:flex;justify-content:flex-end;",
+                                                      actionButton("close_room", "Close Room", class = "btn btn-close-room btn-sm")
+                                             ),
                                              tags$div(class = "pcard",
                                                       tags$div(class = "sec-eye", "Navigation"),
                                                       tags$div(class = "pcard-title", "Send all guests to a question"),
@@ -629,7 +667,6 @@ ui <- fluidPage(
                                              ),
                                              
                                              tags$div(class = "admin-grid",
-                                                      # Questions
                                                       tags$div(class = "pcard",
                                                                tags$div(class = "sec-eye", "Questions"),
                                                                tags$div(class = "pcard-title", "Manage questions"),
@@ -643,7 +680,6 @@ ui <- fluidPage(
                                                                selectInput("restart_question_id", "Reset responses for", choices = NULL),
                                                                actionButton("restart_question", "Reset", class = "btn btn-ghost")
                                                       ),
-                                                      # Settings
                                                       tags$div(class = "pcard",
                                                                tags$div(class = "sec-eye", "Settings"),
                                                                tags$div(class = "pcard-title", "Voting rules"),
@@ -666,7 +702,6 @@ ui <- fluidPage(
                                                       )
                                              ),
                                              
-                                             # Live results + admin answer controls
                                              tags$div(class = "pcard",
                                                       tags$div(class = "sec-eye", "Live Results"),
                                                       tags$div(class = "pcard-title", style = "margin-bottom:.75rem;", "Question breakdown"),
@@ -708,7 +743,6 @@ ui <- fluidPage(
                                                              "Delete an answer. Votes are automatically refunded to guests.")
                                              ),
                                              
-                                             # Top X
                                              tags$div(class = "pcard",
                                                       tags$div(class = "sec-eye", "Cross-Question Summary"),
                                                       tags$div(class = "pcard-title", "Top answers across all questions"),
@@ -720,14 +754,12 @@ ui <- fluidPage(
                                                       uiOutput("top_answers_ui")
                                              ),
                                              
-                                             # Guest management
                                              tags$div(class = "pcard",
                                                       tags$div(class = "sec-eye", "Attendees"),
                                                       tags$div(class = "pcard-title", style = "margin-bottom:.75rem;", "Manage guests"),
                                                       uiOutput("guest_mgmt_ui")
                                              ),
                                              
-                                             # Export
                                              tags$div(class = "pcard",
                                                       tags$div(class = "sec-eye", "Export"),
                                                       tags$div(class = "pcard-title", "Download session data"),
@@ -736,7 +768,6 @@ ui <- fluidPage(
                                                       downloadButton("export_csv", "Download CSV", class = "btn btn-ink")
                                              ),
                                              
-                                             # Activity
                                              tags$div(class = "pcard",
                                                       tags$div(class = "sec-eye", "Live Activity"),
                                                       tags$div(class = "pcard-title", style = "margin-bottom:.75rem;", "Room activity"),
@@ -750,8 +781,8 @@ ui <- fluidPage(
            tags$p("Chorus by ",
                   tags$a("Dr. Cristian Román-Palacios · Data Diversity Lab, U of A",
                          href = "https://datadiversitylab.github.io/", target = "_blank"),
-                  " · ", tags$a("GitHub",
-                                href = "https://github.com/datadiversitylab/polapp", target = "_blank")
+                  "  ", tags$a("GitHub",
+                               href = "https://github.com/datadiversitylab/chorus", target = "_blank")
            ),
            tags$p("Concept by ",
                   tags$a("Dr. Heidi Steiner", href = "https://heidiesteiner.netlify.app/", target = "_blank")),
@@ -759,9 +790,6 @@ ui <- fluidPage(
   )
 )
 
-# ============================================================================
-# SERVER
-# ============================================================================
 server <- function(input, output, session) {
   
   sid <- paste0("s_", as.integer(Sys.time()), "_", sample(1e6, 1))
@@ -773,29 +801,33 @@ server <- function(input, output, session) {
   guest_name    <- reactiveVal("")
   vote_msg      <- reactiveVal("")
   is_kicked     <- reactiveVal(FALSE)
+  is_room_closed <- reactiveVal(FALSE)
   rename_target <- reactiveVal(NULL)
   
   output$isAdmin        <- reactive({ is_admin() })
   output$validGuestConf <- reactive({ !is.null(guest_cid()) })
   output$isKicked       <- reactive({ is_kicked() })
+  output$isRoomClosed   <- reactive({ is_room_closed() })
   outputOptions(output, "isAdmin",        suspendWhenHidden = FALSE)
   outputOptions(output, "validGuestConf", suspendWhenHidden = FALSE)
   outputOptions(output, "isKicked",       suspendWhenHidden = FALSE)
+  outputOptions(output, "isRoomClosed",   suspendWhenHidden = FALSE)
   
   trig_g <- reactive({ cid <- guest_cid(); req(cid); get_trigger(cid)() })
   trig_a <- reactive({ cid <- admin_cid(); req(cid); get_trigger(cid)() })
   
-  # ── Polling observer (kick, name sync, forced question) ──────────────────
   observe({
     invalidateLater(1500, session)
     cid <- guest_cid(); if (is.null(cid)) return()
     if (isTRUE(get_kick_trig(sid)())) { is_kicked(TRUE); return() }
+    e <- get_conf(cid)
+    if (!is.null(e) && isTRUE(e$room_closed)) { is_room_closed(TRUE); return() }
     gl <- list_guests(cid)
     if (!is.null(gl[[sid]])) {
       stored_nm <- gl[[sid]]$name
       if (stored_nm != guest_name()) guest_name(stored_nm)
     }
-    e <- get_conf(cid); if (is.null(e)) return()
+    if (is.null(e)) return()
     fq <- e$forced_qid
     if (!is.null(fq) && !is.na(fq) && nchar(fq) > 0) {
       if (is.null(guest_qsel()) || guest_qsel() != fq) {
@@ -805,7 +837,6 @@ server <- function(input, output, session) {
     }
   })
   
-  # ── Kick screen ───────────────────────────────────────────────────────────
   output$kicked_ui <- renderUI({
     if (!is_kicked()) return(NULL)
     tags$div(class = "kicked-screen",
@@ -816,7 +847,28 @@ server <- function(input, output, session) {
     )
   })
   
-  # ── ADMIN: create ─────────────────────────────────────────────────────────
+  output$room_closed_ui <- renderUI({
+    if (!is_room_closed()) return(NULL)
+    tags$div(class = "closed-screen",
+             tags$div(class = "closed-icon", "🎶"),
+             tags$div(class = "closed-title", "This room has been closed"),
+             tags$div(class = "closed-sub",
+                      "The organizer has ended the session. Thank you for participating in Chorus.")
+    )
+  })
+  
+  observeEvent(input$close_room, {
+    cid <- admin_cid(); req(cid)
+    e   <- get_conf(cid); req(e)
+    e$room_closed <- TRUE
+    gl <- list_guests(cid)
+    for (gsid in names(gl)) get_kick_trig(gsid)(TRUE)
+    assign(cid, list(), envir = store$guests)
+    assign(cid, 0L,     envir = store$user_counts)
+    is_admin(FALSE); admin_cid(NULL)
+    showNotification("Room closed. All guests have been disconnected.")
+  })
+  
   observeEvent(input$create_conf, {
     id <- trimws(input$new_conf_id)
     if (nchar(id) == 0 || exists(id, envir = store$conferences, inherits = FALSE)) {
@@ -831,7 +883,6 @@ server <- function(input, output, session) {
     showNotification(paste("Room created:", id))
   })
   
-  # ── ADMIN: resume ─────────────────────────────────────────────────────────
   observeEvent(input$resume_conf, {
     key <- trimws(input$resume_key_input)
     if (!exists(key, envir = store$admin_keys, inherits = FALSE)) {
@@ -842,7 +893,6 @@ server <- function(input, output, session) {
     bump(cid); showNotification(paste("Resumed room:", cid))
   })
   
-  # ── Token display ─────────────────────────────────────────────────────────
   output$admin_token_display <- renderUI({
     req(admin_cid())
     cid   <- admin_cid(); e <- get_conf(cid); req(e)
@@ -860,10 +910,12 @@ server <- function(input, output, session) {
     )
   })
   
-  # ── GUEST: enter ──────────────────────────────────────────────────────────
   observeEvent(input$guest_enter, {
     token <- trimws(input$guest_token_input)
     nm    <- trimws(input$guest_name_input)
+    if (nchar(token) == 0) {
+      showNotification("Please enter an access token.", type = "error"); return()
+    }
     if (!exists(token, envir = store$tokens, inherits = FALSE)) {
       showNotification("Invalid token. Check with your organizer.", type = "error"); return()
     }
@@ -887,7 +939,6 @@ server <- function(input, output, session) {
     })
   })
   
-  # ── Self-rename ───────────────────────────────────────────────────────────
   observeEvent(input$self_rename_btn, {
     cid <- guest_cid(); req(cid)
     nm  <- trimws(input$self_rename_input)
@@ -900,7 +951,6 @@ server <- function(input, output, session) {
     bump(cid); showNotification(paste("Name updated to:", nm))
   })
   
-  # ── User counts ───────────────────────────────────────────────────────────
   output$user_count_ui <- renderUI({
     trig_a(); cid <- admin_cid(); if (is.null(cid)) return(NULL)
     n <- get(cid, envir = store$user_counts, inherits = FALSE) %||% 0L
@@ -919,7 +969,6 @@ server <- function(input, output, session) {
              tags$span(class = "name-badge-dot", "●"), paste0("Participating as: ", nm))
   })
   
-  # ── Guest mode badges (anonymous / blind) ─────────────────────────────────
   output$guest_mode_badges_ui <- renderUI({
     trig_g(); cid <- guest_cid(); if (is.null(cid)) return(NULL)
     e <- get_conf(cid); if (is.null(e)) return(NULL)
@@ -933,7 +982,6 @@ server <- function(input, output, session) {
     tags$div(style="display:flex;gap:.5rem;flex-wrap:wrap;margin:.5rem 0;", badges)
   })
   
-  # ── Guest timer display ───────────────────────────────────────────────────
   output$guest_timer_ui <- renderUI({
     invalidateLater(1000, session)
     cid <- guest_cid(); qid <- guest_qsel(); req(cid, qid)
@@ -941,6 +989,25 @@ server <- function(input, output, session) {
     if (!exists(qid, envir = e$questions, inherits = FALSE)) return(NULL)
     q <- get(qid, envir = e$questions, inherits = FALSE)
     make_timer_ui(q, admin = FALSE)
+  })
+  
+  output$guest_suggest_lock_ui <- renderUI({
+    trig_g()
+    cid <- guest_cid(); qid <- guest_qsel(); req(cid, qid)
+    e <- get_conf(cid); if (is.null(e)) return(NULL)
+    if (!exists(qid, envir = e$questions, inherits = FALSE)) return(NULL)
+    q <- get(qid, envir = e$questions, inherits = FALSE)
+    if (isTRUE(q$locked)) {
+      tagList(
+        tags$div(style="margin-bottom:1rem;",
+                 tags$div(class="lock-banner",
+                          tags$span(class="lock-icon","🔒"),
+                          "The organizer has locked new suggestions for this question.")),
+        tags$script(HTML("document.getElementById('answer_input_wrap').style.display='none';"))
+      )
+    } else {
+      tags$script(HTML("document.getElementById('answer_input_wrap').style.display='';"))
+    }
   })
   
   
@@ -975,7 +1042,6 @@ server <- function(input, output, session) {
     )
   })
   
-  # Live observer: total unlimited toggle
   observeEvent(input$total_unlimited, {
     cid <- admin_cid(); req(cid); e <- get_conf(cid); req(e)
     e$settings$max_votes_total <- if (isTRUE(input$total_unlimited)) Inf
@@ -983,7 +1049,6 @@ server <- function(input, output, session) {
     bump(cid)
   }, ignoreInit = TRUE)
   
-  # Live observer: total numeric value
   observeEvent(input$max_votes_total, {
     cid <- admin_cid(); req(cid); e <- get_conf(cid); req(e)
     if (!isTRUE(input$total_unlimited) && !is.null(input$max_votes_total)) {
@@ -992,7 +1057,6 @@ server <- function(input, output, session) {
     }
   }, ignoreInit = TRUE)
   
-  # Live observer: per-q unlimited toggle
   observeEvent(input$per_q_unlimited, {
     cid <- admin_cid(); req(cid); e <- get_conf(cid); req(e)
     e$settings$max_votes_per_q <- if (isTRUE(input$per_q_unlimited)) Inf
@@ -1000,7 +1064,6 @@ server <- function(input, output, session) {
     bump(cid)
   }, ignoreInit = TRUE)
   
-  # Live observer: per-q numeric value
   observeEvent(input$max_votes_per_q, {
     cid <- admin_cid(); req(cid); e <- get_conf(cid); req(e)
     if (!isTRUE(input$per_q_unlimited) && !is.null(input$max_votes_per_q)) {
@@ -1009,21 +1072,18 @@ server <- function(input, output, session) {
     }
   }, ignoreInit = TRUE)
   
-  # Live observer: anonymous toggle
   observeEvent(input$setting_anonymous, {
     cid <- admin_cid(); req(cid); e <- get_conf(cid); req(e)
     e$settings$anonymous <- isTRUE(input$setting_anonymous)
     bump(cid)
   }, ignoreInit = TRUE)
   
-  # Live observer: show_results toggle
   observeEvent(input$setting_show_results, {
     cid <- admin_cid(); req(cid); e <- get_conf(cid); req(e)
     e$settings$show_results <- isTRUE(input$setting_show_results)
     bump(cid)
   }, ignoreInit = TRUE)
   
-  # ── Timer observers ───────────────────────────────────────────────────────
   observeEvent(input$timer_start, {
     cid <- admin_cid(); qid <- input$question_id_admin; req(cid, qid)
     e   <- get_conf(cid)
@@ -1035,7 +1095,7 @@ server <- function(input, output, session) {
     q$timer_active <- TRUE
     assign(qid, q, envir = e$questions)
     add_activity(cid, paste0("Timer started: <strong>", dur, "s</strong> for <em>", q$text, "</em>"),
-                 msg_anon = paste0("Timer started for <em>", q$text, "</em>"))
+                 admin_only = TRUE)
     bump(cid)
   })
   observeEvent(input$timer_stop, {
@@ -1071,23 +1131,23 @@ server <- function(input, output, session) {
           assign(qid, q, envir = e$questions)
           add_activity(cid,
                        paste0("Timer expired for <strong>", q$text, "</strong>. Suggestions locked."),
-                       msg_anon = paste0("Time is up for <em>", q$text, "</em>"))
+                       admin_only = TRUE)
           bump(cid)
         }
       }
     }
   })
   
-  # ── Admin timer display ───────────────────────────────────────────────────
   output$admin_timer_ui <- renderUI({
-    trig_a(); cid <- admin_cid(); qid <- input$question_id_admin; req(cid, qid)
+    invalidateLater(1000, session)
+    trig_a()
+    cid <- admin_cid(); qid <- input$question_id_admin; req(cid, qid)
     e <- get_conf(cid); req(e)
     if (!exists(qid, envir = e$questions, inherits = FALSE)) return(NULL)
     q <- get(qid, envir = e$questions, inherits = FALSE)
     make_timer_ui(q, admin = TRUE)
   })
   
-  # ── Force question ────────────────────────────────────────────────────────
   output$force_q_selector_ui <- renderUI({
     qs <- qs_a()
     if (length(qs) == 0) return(tags$p(style="color:var(--ink-light);font-size:.9rem;","No questions yet."))
@@ -1101,7 +1161,7 @@ server <- function(input, output, session) {
     if (!exists(qid, envir = e$questions, inherits = FALSE)) return()
     q   <- get(qid, envir = e$questions, inherits = FALSE)
     e$forced_qid <- qid
-    add_activity(cid, paste0("All guests navigated to: <strong>", q$text, "</strong>"))
+    add_activity(cid, paste0("All guests navigated to: <strong>", q$text, "</strong>"), admin_only = TRUE)
     bump(cid); showNotification("All guests moved to that question.")
   })
   observeEvent(input$release_force, {
@@ -1111,7 +1171,6 @@ server <- function(input, output, session) {
     bump(cid); showNotification("Question navigation released.")
   })
   
-  # ── Questions ─────────────────────────────────────────────────────────────
   qs_a <- reactive({
     trig_a(); cid <- admin_cid(); req(cid)
     e <- get_conf(cid); req(e); as.list(e$questions)
@@ -1148,7 +1207,7 @@ server <- function(input, output, session) {
                              stringsAsFactors=FALSE)
     ), envir = e$questions)
     updateTextInput(session, "new_question_text", value = "")
-    add_activity(cid, paste0("Question added: <strong>", txt, "</strong>"))
+    add_activity(cid, paste0("Question added: <strong>", txt, "</strong>"), admin_only = TRUE)
     bump(cid); showNotification("Question added.")
   })
   
@@ -1174,7 +1233,6 @@ server <- function(input, output, session) {
     bump(cid); showNotification("Responses reset.")
   })
   
-  # ── Admin: question selector ──────────────────────────────────────────────
   output$question_ui_admin <- renderUI({
     qs <- qs_a()
     if (length(qs) == 0) return(tags$p(style="color:var(--ink-light);font-size:.95rem;","No questions yet."))
@@ -1182,7 +1240,6 @@ server <- function(input, output, session) {
                 choices = setNames(names(qs), sapply(qs, `[[`, "text")))
   })
   
-  # ── Lock toggle ───────────────────────────────────────────────────────────
   output$lock_toggle_ui <- renderUI({
     trig_a(); cid <- admin_cid(); qid <- input$question_id_admin; req(cid, qid)
     e <- get_conf(cid); req(e)
@@ -1206,11 +1263,10 @@ server <- function(input, output, session) {
     q$locked <- !isTRUE(q$locked)
     assign(qid, q, envir = e$questions)
     add_activity(cid, paste0("Suggestions <strong>",
-                             if(q$locked)"locked" else "unlocked","</strong> for: <em>",q$text,"</em>"))
+                             if(q$locked)"locked" else "unlocked","</strong> for: <em>",q$text,"</em>"), admin_only = TRUE)
     bump(cid)
   })
   
-  # ── Admin: suggest answer ─────────────────────────────────────────────────
   observeEvent(input$admin_submit_answer, {
     cid <- admin_cid(); qid <- input$question_id_admin
     ans <- trimws(input$admin_answer_text); req(cid, qid, nchar(ans) > 0)
@@ -1222,7 +1278,7 @@ server <- function(input, output, session) {
                                     Submitter="Organizer", IsAdmin=TRUE, stringsAsFactors=FALSE))
     assign(qid, q, envir = e$questions)
     updateTextInput(session, "admin_answer_text", value = "")
-    add_activity(cid, paste0("Organizer suggested: <em>", ans, "</em>"))
+    add_activity(cid, paste0("Organizer suggested: <em>", ans, "</em>"), admin_only = TRUE)
     bump(cid); showNotification("Answer added.")
   })
   
@@ -1247,12 +1303,10 @@ server <- function(input, output, session) {
       msg <- paste0(msg, ". <strong>", n_refunds, "</strong> guest",
                     if(n_refunds!=1)"s'" else "'", " vote", if(n_refunds!=1)"s" else "",
                     " refunded")
-    add_activity(cid, msg)
-    bump(cid); showNotification(paste0("Answer deleted. ", n_refunds, " vote(s) refunded."),
-                                type = "warning")
+    add_activity(cid, msg, admin_only = TRUE)
+    bump(cid); showNotification(paste0("Answer deleted. ", n_refunds, " vote(s) refunded."), type = "warning")
   })
   
-  # ── Admin results table ───────────────────────────────────────────────────
   output$admin_table <- renderDT({
     trig_a(); cid <- admin_cid(); qid <- input$question_id_admin; req(cid, qid)
     e <- get_conf(cid); req(e)
@@ -1280,7 +1334,6 @@ server <- function(input, output, session) {
                            columnDefs=list(list(orderable=FALSE, targets=3))))
   })
   
-  # ── Top X ─────────────────────────────────────────────────────────────────
   output$top_answers_ui <- renderUI({
     trig_a(); cid <- admin_cid(); req(cid)
     e <- get_conf(cid); req(e)
@@ -1315,7 +1368,6 @@ server <- function(input, output, session) {
     )
   })
   
-  # ── Guest management ──────────────────────────────────────────────────────
   output$guest_mgmt_ui <- renderUI({
     trig_a(); cid <- admin_cid(); req(cid)
     gl <- list_guests(cid)
@@ -1382,7 +1434,6 @@ server <- function(input, output, session) {
     bump(cid); showNotification(paste("Removed:", nm), type="warning")
   })
   
-  # ── Export ────────────────────────────────────────────────────────────────
   output$export_csv <- downloadHandler(
     filename = function() paste0("chorus_", admin_cid()%||%"export","_",format(Sys.Date(),"%Y%m%d"),".csv"),
     content  = function(file) {
@@ -1402,7 +1453,6 @@ server <- function(input, output, session) {
     }
   )
   
-  # ── Guest: question selector ──────────────────────────────────────────────
   output$question_ui_guest <- renderUI({
     qs <- qs_g()
     if (length(qs)==0)
@@ -1414,7 +1464,6 @@ server <- function(input, output, session) {
   })
   observeEvent(input$question_id_guest, { guest_qsel(input$question_id_guest) })
   
-  # ── Guest vote budget ─────────────────────────────────────────────────────
   output$guest_vote_budget_ui <- renderUI({
     trig_g()
     cid <- guest_cid(); qid <- guest_qsel(); req(cid, qid)
@@ -1435,7 +1484,6 @@ server <- function(input, output, session) {
     )
   })
   
-  # ── Guest: answer cards ───────────────────────────────────────────────────
   output$guest_answer_section <- renderUI({
     trig_g()
     cid <- guest_cid(); qid <- guest_qsel(); req(cid, qid)
@@ -1458,24 +1506,9 @@ server <- function(input, output, session) {
     at_limit        <- !total_ok || !per_q_ok
     total_all_votes <- if (nrow(responses)>0) sum(responses$Votes) else 0L
     
-    suggest_box <- if (locked)
-      tags$div(style="margin-bottom:1.5rem;",
-               tags$div(class="lock-banner",
-                        tags$span(class="lock-icon","🔒"),
-                        "The organizer has locked new suggestions for this question."))
-    else
-      tags$div(style="margin-bottom:1.5rem;",
-               tags$div(class="sec-eye","Suggest an answer"),
-               tags$div(style="display:flex;gap:.75rem;align-items:flex-end;",
-                        tags$div(style="flex:1;", textInput("answer_text",NULL,placeholder="Type your answer...")),
-                        actionButton("submit_answer","Submit",class="btn btn-sage",style="margin-bottom:1rem;flex-shrink:0;")
-               )
-      )
-    
     if (nrow(responses)==0)
-      return(tagList(suggest_box,
-                     tags$p(style="color:var(--ink-light);font-size:.95rem;",
-                            if(locked)"No answers yet." else "No answers yet. Be the first!")))
+      return(tags$p(style="color:var(--ink-light);font-size:.95rem;",
+                    if(locked)"No answers yet." else "No answers yet. Be the first!"))
     
     responses <- responses[order(-responses$Votes),]
     
@@ -1519,7 +1552,10 @@ server <- function(input, output, session) {
                                  vote_lbl)
                ),
                tags$div(class="answer-vote-controls", minus_btn,
-                        if(show_results) tags$div(class="vote-count", responses$Votes[i]) else NULL,
+                        if(show_results)
+                          tags$div(class="vote-count", responses$Votes[i])
+                        else
+                          tags$div(class="my-vote-count", paste0("My votes: ", my_v)),
                         plus_btn)
       )
     })
@@ -1527,14 +1563,12 @@ server <- function(input, output, session) {
     msg_ui <- if (nchar(vote_msg())>0) tags$div(class="vote-msg", vote_msg()) else NULL
     
     tagList(
-      suggest_box,
       tags$div(class="sec-eye","Vote on answers"),
       tags$div(class="answer-list", cards),
       msg_ui
     )
   })
   
-  # ── Vote action ───────────────────────────────────────────────────────────
   observeEvent(input$vote_action, {
     if (is_kicked()) return()
     va  <- input$vote_action
@@ -1583,7 +1617,6 @@ server <- function(input, output, session) {
     vote_msg(""); bump(cid)
   })
   
-  # ── Guest: submit answer ──────────────────────────────────────────────────
   observeEvent(input$submit_answer, {
     if (is_kicked()) return()
     cid <- guest_cid(); qid <- guest_qsel()
@@ -1603,7 +1636,6 @@ server <- function(input, output, session) {
     bump(cid)
   })
   
-  # ── Activity feeds ────────────────────────────────────────────────────────
   make_feed <- function(cid, is_guest = FALSE) {
     if (is.null(cid)||!exists(cid,envir=store$activity_log,inherits=FALSE))
       return(tags$div(class="activity-feed",tags$div(class="activity-empty","No activity yet.")))
@@ -1616,6 +1648,7 @@ server <- function(input, output, session) {
       if (!is.null(e)) anon <- isTRUE(e$settings$anonymous)
     }
     items <- lapply(log, function(ev) {
+      if (is_guest && !isTRUE(ev$admin_only)) return(NULL)
       msg_text <- if (anon && !is.null(ev$msg_anon)) ev$msg_anon
       else if (anon && is.null(ev$msg_anon)) return(NULL)
       else ev$msg
