@@ -36,14 +36,15 @@ init_conf <- function(cid, admin_key) {
   e <- new.env(parent = emptyenv())
   e$questions    <- new.env(parent = emptyenv())
   e$settings     <- list(
-    max_votes_total = Inf,
-    max_votes_per_q = 1L,
-    anonymous       = FALSE,
-    show_results    = TRUE
+    max_votes_total   = Inf,
+    max_votes_per_q   = 1L,
+    max_answers_per_q = 1L,
+    max_answers_total = Inf,
+    anonymous         = FALSE,
+    show_results      = TRUE
   )
   e$admin_key    <- admin_key
   e$forced_qid   <- NULL
-  e$room_closed  <- FALSE
   assign(cid,       e,         envir = store$conferences)
   assign(cid,       0L,        envir = store$user_counts)
   assign(cid,       list(),    envir = store$activity_log)
@@ -155,110 +156,113 @@ make_timer_ui <- function(q, admin = FALSE) {
   } else NULL
 }
 
+
 chorus_css <- '
 @import url("https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;0,9..144,800;1,9..144,300;1,9..144,600&family=Figtree:wght@300;400;500;600;700&display=swap");
 
 :root {
-  --cream:      #f8f5ef; --cream-dark: #ede8de;
-  --ink:        #1c2b22; --ink-mid:    #3d5044; --ink-light: #6b836f;
-  --sage:       #7aab85; --sage-d:     #5a8f6a; --sage-light:#a8c9b0;
-  --sage-pale:  #dff0e4; --sage-mist:  #eef7f0;
-  --gold:       #c8a84b; --red-soft:   #c0544a; --red-mist:  #fdf0ee;
-  --white:      #ffffff; --border:     #dce8df;
-  --r-lg:20px; --r-md:14px; --r-sm:8px; --r-pill:999px;
-  --sh-sm:0 2px 12px rgba(28,43,34,0.07); --sh-md:0 8px 32px rgba(28,43,34,0.11);
-  --ease:0.22s cubic-bezier(.4,0,.2,1);
+  --cream:#f8f5ef; --cream-dark:#ede8de;
+  --ink:#1c2b22; --ink-mid:#3d5044; --ink-light:#6b836f;
+  --sage:#7aab85; --sage-d:#5a8f6a; --sage-light:#a8c9b0;
+  --sage-pale:#dff0e4; --sage-mist:#eef7f0;
+  --gold:#c8a84b; --red-soft:#c0544a; --red-mist:#fdf0ee;
+  --white:#ffffff; --border:#dce8df;
+  --r-lg:18px; --r-md:12px; --r-sm:8px; --r-pill:999px;
+  --sh-sm:0 2px 10px rgba(28,43,34,.07); --sh-md:0 6px 24px rgba(28,43,34,.11);
+  --ease:0.2s cubic-bezier(.4,0,.2,1);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-html{scroll-behavior:smooth;font-size:17px;}
+html{scroll-behavior:smooth;font-size:17.5px;}
 body{font-family:"Figtree",sans-serif!important;background:var(--cream)!important;
   color:var(--ink)!important;min-height:100vh;line-height:1.6;}
 body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
   background-image:
-    radial-gradient(ellipse 80% 60% at 15% 10%,rgba(122,171,133,.10) 0%,transparent 60%),
-    radial-gradient(ellipse 60% 50% at 85% 85%,rgba(200,168,75,.07) 0%,transparent 60%);}
+    radial-gradient(ellipse 80% 60% at 10% 5%,rgba(122,171,133,.09) 0%,transparent 60%),
+    radial-gradient(ellipse 60% 50% at 90% 90%,rgba(200,168,75,.06) 0%,transparent 60%);}
 .container-fluid{padding:0!important;position:relative;z-index:1;}
 
-/* ── TOP BAR ── */
+/* TOPBAR */
 .topbar{position:sticky;top:0;z-index:200;display:flex;align-items:center;
-  justify-content:space-between;padding:0 2.4rem;height:66px;
-  background:rgba(248,245,239,.92);backdrop-filter:blur(22px) saturate(1.5);
+  justify-content:space-between;padding:0 2rem;height:58px;
+  background:rgba(248,245,239,.94);backdrop-filter:blur(20px) saturate(1.4);
   border-bottom:1px solid var(--border);}
-.brand{display:flex;align-items:baseline;gap:.55rem;}
-.brand-name{font-family:"Fraunces",serif;font-size:1.5rem;font-weight:800;
+.brand{display:flex;align-items:baseline;gap:.45rem;}
+.brand-name{font-family:"Fraunces",serif;font-size:1.35rem;font-weight:800;
   letter-spacing:-.03em;color:var(--ink);}
-.brand-tag{font-size:.72rem;font-weight:600;letter-spacing:.08em;
+.brand-tag{font-size:.68rem;font-weight:600;letter-spacing:.09em;
   text-transform:uppercase;color:var(--ink-light);}
-.topbar-right{display:flex;align-items:center;gap:1rem;}
-.role-lbl{font-size:.75rem;font-weight:600;color:var(--ink-light);
+.topbar-right{display:flex;align-items:center;gap:.75rem;}
+.role-lbl{font-size:.72rem;font-weight:600;color:var(--ink-light);
   text-transform:uppercase;letter-spacing:.09em;}
 
-/* ── WRAPPER ── */
-.chorus-wrap{max-width:980px;margin:0 auto;padding:2.5rem 2rem 6rem;}
+/* WRAPPER */
+.chorus-wrap{max-width:900px;margin:0 auto;padding:1.6rem 1.5rem 5rem;}
 
-/* ── HERO ── */
-.hero{text-align:center;padding:2.8rem 1rem 2rem;animation:fadeUp .55s ease both;}
-.eyebrow{font-size:.72rem;font-weight:700;letter-spacing:.18em;
-  text-transform:uppercase;color:var(--sage);margin-bottom:.55rem;}
-.hero-title{font-family:"Fraunces",serif;font-size:clamp(2.2rem,5vw,3.2rem);
-  font-weight:800;line-height:1.08;color:var(--ink);letter-spacing:-.03em;}
+/* COMPACT HERO */
+.hero{display:flex;align-items:center;justify-content:space-between;
+  padding:.9rem 0 1.2rem;border-bottom:1px solid var(--border);margin-bottom:1.5rem;}
+.hero-left{}
+.eyebrow{font-size:.64rem;font-weight:700;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--sage);margin-bottom:.15rem;}
+.hero-title{font-family:"Fraunces",serif;font-size:1.55rem;
+  font-weight:800;line-height:1.1;color:var(--ink);letter-spacing:-.03em;}
 .hero-title em{font-style:italic;color:var(--sage);}
 
-/* ── CARD ── */
+/* CARD */
 .pcard{background:var(--white);border:1px solid var(--border);border-radius:var(--r-lg);
-  padding:2rem 2.2rem;box-shadow:var(--sh-sm);margin-bottom:1.4rem;
-  animation:fadeUp .5s ease both;transition:box-shadow var(--ease);}
+  padding:1.5rem 1.7rem;box-shadow:var(--sh-sm);margin-bottom:1.1rem;
+  animation:fadeUp .4s ease both;transition:box-shadow var(--ease);}
 .pcard:hover{box-shadow:var(--sh-md);}
-.pcard-title{font-family:"Fraunces",serif;font-size:1.25rem;font-weight:700;
-  color:var(--ink);letter-spacing:-.02em;margin-bottom:.25rem;}
-.pcard-sub{font-size:.92rem;color:var(--ink-light);font-weight:300;
-  line-height:1.65;margin-bottom:1.5rem;}
+.pcard-title{font-family:"Fraunces",serif;font-size:1.1rem;font-weight:700;
+  color:var(--ink);letter-spacing:-.02em;margin-bottom:.2rem;}
+.pcard-sub{font-size:.88rem;color:var(--ink-light);font-weight:300;
+  line-height:1.6;margin-bottom:1.2rem;}
 
-/* ── STEP LIST ── */
-.steps{list-style:none;display:flex;flex-direction:column;gap:.6rem;margin-bottom:1.8rem;}
-.steps li{display:flex;align-items:flex-start;gap:.8rem;
-  font-size:.95rem;color:var(--ink-mid);line-height:1.5;}
-.step-n{width:24px;height:24px;border-radius:50%;flex-shrink:0;
-  background:var(--sage);color:white;font-size:.7rem;font-weight:700;
-  display:flex;align-items:center;justify-content:center;margin-top:1px;}
+/* STEPS */
+.steps{list-style:none;display:flex;flex-direction:column;gap:.5rem;margin-bottom:1.5rem;}
+.steps li{display:flex;align-items:flex-start;gap:.7rem;
+  font-size:.9rem;color:var(--ink-mid);line-height:1.5;}
+.step-n{width:22px;height:22px;border-radius:50%;flex-shrink:0;
+  background:var(--sage);color:white;font-size:.65rem;font-weight:700;
+  display:flex;align-items:center;justify-content:center;margin-top:2px;}
 
-/* ── INPUTS ── */
-label{font-size:.75rem!important;font-weight:700!important;text-transform:uppercase!important;
+/* INPUTS */
+label{font-size:.7rem!important;font-weight:700!important;text-transform:uppercase!important;
   letter-spacing:.1em!important;color:var(--ink-light)!important;
-  margin-bottom:.4rem!important;display:block!important;}
+  margin-bottom:.35rem!important;display:block!important;}
 .form-control{border:1.5px solid var(--border)!important;border-radius:var(--r-sm)!important;
   background:var(--white)!important;font-family:"Figtree",sans-serif!important;
-  font-size:1rem!important;color:var(--ink)!important;padding:.65rem .95rem!important;
+  font-size:1rem!important;color:var(--ink)!important;padding:.6rem .9rem!important;
   transition:border-color var(--ease),box-shadow var(--ease)!important;
   box-shadow:none!important;width:100%!important;}
 .form-control:focus{border-color:var(--sage)!important;
-  box-shadow:0 0 0 3px rgba(122,171,133,.20)!important;outline:none!important;}
-.form-group{margin-bottom:1.2rem!important;}
-.token-input .form-control{font-family:"Fraunces",serif!important;font-size:1.5rem!important;
+  box-shadow:0 0 0 3px rgba(122,171,133,.18)!important;outline:none!important;}
+.form-group{margin-bottom:1rem!important;}
+.token-input .form-control{font-family:"Fraunces",serif!important;font-size:1.4rem!important;
   font-weight:800!important;letter-spacing:.22em!important;text-align:center!important;
-  padding:.9rem 1.2rem!important;border-radius:var(--r-md)!important;}
+  padding:.8rem 1rem!important;border-radius:var(--r-md)!important;}
 
-/* ── LIMIT INPUTS ── */
-.limit-row{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:1rem;}
+/* LIMIT INPUTS */
+.limit-row{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:.75rem;}
 .limit-row label{margin-bottom:0!important;white-space:nowrap;}
-.limit-row .form-control{width:90px!important;}
-.limit-badge{display:inline-flex;align-items:center;gap:.4rem;
+.limit-row .form-control{width:80px!important;}
+.limit-badge{display:inline-flex;align-items:center;gap:.35rem;
   background:var(--sage-mist);border:1px solid var(--sage-pale);
-  border-radius:var(--r-pill);padding:.3rem .85rem;
-  font-size:.82rem;font-weight:600;color:var(--ink-mid);}
+  border-radius:var(--r-pill);padding:.25rem .75rem;
+  font-size:.78rem;font-weight:600;color:var(--ink-mid);}
 .limit-badge.unlimited{color:var(--sage-d);}
 
-/* ── BUTTONS ── */
+/* BUTTONS */
 .btn{font-family:"Figtree",sans-serif!important;font-size:.85rem!important;
   font-weight:700!important;letter-spacing:.07em!important;text-transform:uppercase!important;
-  border-radius:var(--r-pill)!important;padding:.65rem 1.6rem!important;
+  border-radius:var(--r-pill)!important;padding:.58rem 1.5rem!important;
   border:none!important;cursor:pointer!important;transition:all var(--ease)!important;
-  display:inline-flex!important;align-items:center!important;gap:.4rem!important;}
+  display:inline-flex!important;align-items:center!important;gap:.35rem!important;}
 .btn-sage{background:var(--sage)!important;color:white!important;
-  box-shadow:0 3px 10px rgba(122,171,133,.35)!important;}
+  box-shadow:0 2px 8px rgba(122,171,133,.32)!important;}
 .btn-sage:hover{background:var(--sage-d)!important;transform:translateY(-1px)!important;}
 .btn-ink{background:var(--ink)!important;color:var(--cream)!important;
-  box-shadow:0 3px 10px rgba(28,43,34,.22)!important;}
+  box-shadow:0 2px 8px rgba(28,43,34,.2)!important;}
 .btn-ink:hover{background:var(--ink-mid)!important;transform:translateY(-1px)!important;}
 .btn-ghost{background:transparent!important;color:var(--ink-light)!important;
   border:1.5px solid var(--border)!important;}
@@ -266,250 +270,271 @@ label{font-size:.75rem!important;font-weight:700!important;text-transform:upperc
   background:var(--sage-mist)!important;}
 .btn-danger{background:var(--red-mist)!important;color:var(--red-soft)!important;
   border:1.5px solid rgba(192,84,74,.2)!important;}
-.btn-danger:hover{background:rgba(192,84,74,.18)!important;}
-.btn-sm{padding:.38rem .85rem!important;font-size:.75rem!important;}
+.btn-danger:hover{background:rgba(192,84,74,.16)!important;}
+.btn-sm{padding:.32rem .75rem!important;font-size:.72rem!important;}
 
-/* ── LOCK BANNER ── */
-.lock-banner{display:flex;align-items:center;gap:.6rem;
+/* LOCK BANNER */
+.lock-banner{display:flex;align-items:center;gap:.5rem;
   background:#fff8e6;border:1px solid #f0d070;border-radius:var(--r-sm);
-  padding:.65rem 1rem;font-size:.9rem;color:#7a5c00;margin-bottom:1rem;}
-.lock-icon{font-size:1rem;}
+  padding:.55rem .9rem;font-size:.86rem;color:#7a5c00;margin-bottom:.9rem;}
+.lock-icon{font-size:.95rem;}
 
-/* ── TOKEN DISPLAY ── */
-.token-box{background:var(--ink);border-radius:var(--r-md);padding:1.6rem 2rem;
-  margin-bottom:1.5rem;position:relative;overflow:hidden;animation:fadeUp .4s ease both;}
-.token-box::before{content:"";position:absolute;top:-40px;right:-40px;
-  width:160px;height:160px;border-radius:50%;
-  background:radial-gradient(circle,rgba(122,171,133,.22) 0%,transparent 70%);}
-.token-lbl{font-size:.7rem;font-weight:700;text-transform:uppercase;
-  letter-spacing:.14em;color:var(--sage-light);margin-bottom:.5rem;}
-.token-val{font-family:"Fraunces",serif;font-size:2.8rem;font-weight:800;
-  letter-spacing:.25em;color:white;line-height:1;}
-.token-hint{font-size:.8rem;color:rgba(255,255,255,.4);margin-top:.55rem;font-weight:300;}
-.admin-key-box{margin-top:1rem;padding:.8rem 1rem;
-  background:rgba(255,255,255,.07);border-radius:var(--r-sm);
-  border:1px solid rgba(255,255,255,.12);}
-.admin-key-lbl{font-size:.62rem;font-weight:700;text-transform:uppercase;
-  letter-spacing:.14em;color:rgba(255,255,255,.4);margin-bottom:.25rem;}
-.admin-key-val{font-family:"Fraunces",serif;font-size:1rem;font-weight:600;
-  letter-spacing:.12em;color:rgba(255,255,255,.65);}
-.admin-key-hint{font-size:.72rem;color:rgba(255,255,255,.3);margin-top:.2rem;}
 
-/* ── STATUS BAR ── */
-.status-bar{display:inline-flex;align-items:center;gap:.55rem;
-  padding:.55rem 1.1rem;background:var(--sage-mist);
+.token-strip{background:var(--ink);border-radius:var(--r-md);
+  padding:1.1rem 1.5rem;margin-bottom:1rem;
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;
+  position:relative;overflow:hidden;animation:fadeUp .4s ease both;}
+.token-strip::before{content:"";position:absolute;top:-30px;right:-30px;
+  width:130px;height:130px;border-radius:50%;z-index:0;
+  background:radial-gradient(circle,rgba(122,171,133,.2) 0%,transparent 70%);pointer-events:none;}
+.ts-left{display:flex;align-items:center;gap:1.2rem;position:relative;z-index:1;}
+.ts-token-block{}
+.ts-room-lbl{font-size:.6rem;font-weight:700;text-transform:uppercase;
+  letter-spacing:.14em;color:var(--sage-light);margin-bottom:.15rem;}
+.ts-token-val{font-family:"Fraunces",serif;font-size:2rem;font-weight:800;
+  letter-spacing:.22em;color:white;line-height:1;}
+.ts-hint{font-size:.72rem;color:rgba(255,255,255,.38);margin-top:.2rem;font-weight:300;}
+.ts-key-block{border-left:1px solid rgba(255,255,255,.12);padding-left:1.2rem;}
+.ts-key-lbl{font-size:.6rem;font-weight:700;text-transform:uppercase;
+  letter-spacing:.12em;color:rgba(255,255,255,.35);margin-bottom:.15rem;}
+.ts-key-val{font-family:"Fraunces",serif;font-size:.88rem;font-weight:600;
+  letter-spacing:.1em;color:rgba(255,255,255,.6);}
+.ts-key-hint{font-size:.66rem;color:rgba(255,255,255,.25);margin-top:.1rem;}
+.ts-right{display:flex;align-items:center;gap:.6rem;flex-shrink:0;position:relative;z-index:2;}
+
+/* STATUS BAR */
+.status-bar{display:inline-flex;align-items:center;gap:.5rem;
+  padding:.45rem .95rem;background:var(--sage-mist);
   border-radius:var(--r-pill);border:1px solid var(--sage-pale);
-  font-size:.88rem;font-weight:500;color:var(--ink-mid);margin-bottom:1.5rem;}
-.status-dot{width:9px;height:9px;border-radius:50%;background:var(--sage);
+  font-size:.83rem;font-weight:500;color:var(--ink-mid);margin-bottom:1.1rem;}
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--sage);
   animation:pulse 2s ease-in-out infinite;}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
 
-/* ── ADMIN GRIDS ── */
-.admin-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.3rem;margin-bottom:1.3rem;}
-@media(max-width:720px){.admin-grid{grid-template-columns:1fr;}}
+/* ADMIN TABS */
+.admin-tabs{display:flex;gap:.25rem;margin-bottom:1.3rem;
+  background:var(--white);border:1px solid var(--border);
+  border-radius:var(--r-pill);padding:.3rem;width:fit-content;}
+.atab{font-family:"Figtree",sans-serif;font-size:.75rem;font-weight:700;
+  letter-spacing:.07em;text-transform:uppercase;cursor:pointer;
+  padding:.4rem 1.1rem;border-radius:var(--r-pill);border:none;
+  background:transparent;color:var(--ink-light);
+  transition:all var(--ease);}
+.atab.active{background:var(--sage);color:white;
+  box-shadow:0 2px 8px rgba(122,171,133,.35);}
+.atab:hover:not(.active){background:var(--sage-mist);color:var(--ink);}
+.tab-panel{display:none;}
+.tab-panel.active{display:block;}
 
-/* ── SECTION LABELS ── */
-.div{height:1px;background:var(--border);margin:1.3rem 0;}
-.sec-eye{font-size:.68rem;font-weight:700;text-transform:uppercase;
-  letter-spacing:.16em;color:var(--sage);margin-bottom:.4rem;}
+/* TWO-COL GRID */
+.admin-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.1rem;margin-bottom:1.1rem;}
+@media(max-width:680px){.admin-grid{grid-template-columns:1fr;}}
 
-/* ── SELF-RENAME ── */
-.self-rename-row{display:flex;gap:.6rem;align-items:flex-end;margin-bottom:1rem;}
-.self-rename-row .form-control{font-size:.9rem!important;}
+/* SECTION LABELS */
+.div{height:1px;background:var(--border);margin:1.1rem 0;}
+.sec-eye{font-size:.62rem;font-weight:700;text-transform:uppercase;
+  letter-spacing:.16em;color:var(--sage);margin-bottom:.35rem;}
 
-/* ── ANSWER CARDS ── */
-.answer-list{display:flex;flex-direction:column;gap:.75rem;margin-top:.5rem;}
+/* SELF-RENAME */
+.self-rename-row{display:flex;gap:.55rem;align-items:flex-end;margin-bottom:.9rem;}
+.self-rename-row .form-control{font-size:.88rem!important;}
+
+/* ANSWER CARDS */
+.answer-list{display:flex;flex-direction:column;gap:.6rem;margin-top:.4rem;}
 .answer-card{background:var(--white);border:1.5px solid var(--border);
-  border-radius:var(--r-md);padding:1rem 1.2rem;display:flex;align-items:center;gap:1rem;
+  border-radius:var(--r-md);padding:.85rem 1rem;display:flex;align-items:center;gap:.9rem;
   transition:border-color var(--ease),box-shadow var(--ease),transform var(--ease);
   position:relative;overflow:hidden;}
 .answer-card:hover{border-color:var(--sage-light);box-shadow:var(--sh-sm);transform:translateY(-1px);}
 .answer-card.voted{border-color:var(--sage);background:var(--sage-mist);}
 .answer-card.admin-card{border-color:var(--gold);background:#fffdf5;}
 .answer-bar-bg{position:absolute;left:0;top:0;bottom:0;border-radius:var(--r-md);
-  background:linear-gradient(90deg,rgba(122,171,133,.13),rgba(122,171,133,.04));
+  background:linear-gradient(90deg,rgba(122,171,133,.12),rgba(122,171,133,.03));
   transition:width .55s cubic-bezier(.4,0,.2,1);z-index:0;}
 .answer-content{flex:1;position:relative;z-index:1;min-width:0;}
 .answer-text{font-size:1rem;font-weight:500;color:var(--ink);line-height:1.4;}
-.answer-meta{font-size:.78rem;color:var(--ink-light);margin-top:.15rem;}
-.admin-tag{display:inline-block;font-size:.62rem;font-weight:700;
+.answer-meta{font-size:.78rem;color:var(--ink-light);margin-top:.1rem;}
+.admin-tag{display:inline-block;font-size:.58rem;font-weight:700;
   text-transform:uppercase;letter-spacing:.08em;
   background:#fdf3d0;color:#b8860b;border-radius:99px;
-  padding:.12rem .5rem;margin-left:.4rem;vertical-align:middle;}
-.answer-vote-controls{display:flex;align-items:center;gap:.5rem;
+  padding:.1rem .45rem;margin-left:.35rem;vertical-align:middle;}
+.answer-vote-controls{display:flex;align-items:center;gap:.4rem;
   position:relative;z-index:1;flex-shrink:0;}
-.vote-count{font-family:"Fraunces",serif;font-size:1.3rem;font-weight:700;
-  color:var(--ink);min-width:2.2rem;text-align:center;line-height:1;}
-.vbtn{width:38px;height:38px;border-radius:50%;border:none!important;
-  cursor:pointer!important;font-size:1.25rem;font-weight:700;line-height:1;
+.vote-count{font-family:"Fraunces",serif;font-size:1.2rem;font-weight:700;
+  color:var(--ink);min-width:2rem;text-align:center;line-height:1;}
+.vbtn{width:34px;height:34px;border-radius:50%;border:none!important;
+  cursor:pointer!important;font-size:1.1rem;font-weight:700;line-height:1;
   display:flex;align-items:center;justify-content:center;
   transition:all var(--ease)!important;padding:0!important;}
 .vbtn-plus{background:var(--sage)!important;color:white!important;
-  box-shadow:0 2px 8px rgba(122,171,133,.35)!important;}
-.vbtn-plus:hover{background:var(--sage-d)!important;transform:scale(1.12)!important;}
+  box-shadow:0 2px 6px rgba(122,171,133,.32)!important;}
+.vbtn-plus:hover{background:var(--sage-d)!important;transform:scale(1.1)!important;}
 .vbtn-minus{background:var(--cream-dark)!important;color:var(--red-soft)!important;}
-.vbtn-minus:hover{background:#f5ddd9!important;transform:scale(1.12)!important;}
+.vbtn-minus:hover{background:#f5ddd9!important;transform:scale(1.1)!important;}
 .vbtn-del{background:var(--red-mist)!important;color:var(--red-soft)!important;
-  font-size:.85rem!important;width:30px!important;height:30px!important;}
-.vbtn-del:hover{background:rgba(192,84,74,.2)!important;}
+  font-size:.8rem!important;width:28px!important;height:28px!important;}
+.vbtn-del:hover{background:rgba(192,84,74,.18)!important;}
 
-/* ── VOTE MSG / BUDGET ── */
-.vote-msg{font-size:.88rem;font-weight:500;color:var(--red-soft);
-  background:var(--red-mist);border-radius:var(--r-sm);padding:.55rem 1rem;
-  margin-top:.8rem;border:1px solid rgba(192,84,74,.18);display:inline-block;}
-.vote-budget{display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:1rem;}
-.budget-pill{display:inline-flex;align-items:center;gap:.35rem;padding:.35rem .9rem;
-  border-radius:var(--r-pill);font-size:.82rem;font-weight:600;
+/* VOTE MSG / BUDGET */
+.vote-msg{font-size:.84rem;font-weight:500;color:var(--red-soft);
+  background:var(--red-mist);border-radius:var(--r-sm);padding:.5rem .9rem;
+  margin-top:.7rem;border:1px solid rgba(192,84,74,.16);display:inline-block;}
+.vote-budget{display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:.9rem;}
+.budget-pill{display:inline-flex;align-items:center;gap:.3rem;padding:.3rem .8rem;
+  border-radius:var(--r-pill);font-size:.78rem;font-weight:600;
   background:var(--sage-mist);border:1px solid var(--sage-pale);color:var(--ink-mid);}
 .budget-pill.warn{background:#fff8e6;border-color:#f0d070;color:#7a5c00;}
-.budget-dot{width:7px;height:7px;border-radius:50%;background:var(--sage);}
+.budget-dot{width:6px;height:6px;border-radius:50%;background:var(--sage);}
 .budget-dot.warn{background:var(--gold);}
 
-/* ── KICK SCREEN ── */
-.kicked-screen{text-align:center;padding:4rem 2rem;animation:fadeUp .4s ease both;}
-.kicked-icon{font-size:3rem;margin-bottom:1rem;}
-.kicked-title{font-family:"Fraunces",serif;font-size:1.8rem;font-weight:700;
-  color:var(--ink);margin-bottom:.5rem;}
-.kicked-sub{font-size:1rem;color:var(--ink-light);font-weight:300;}
+/* KICK / CLOSED SCREENS */
+.kicked-screen,.closed-screen{text-align:center;padding:3rem 2rem;animation:fadeUp .4s ease both;}
+.kicked-icon,.closed-icon{font-size:2.6rem;margin-bottom:.8rem;}
+.kicked-title,.closed-title{font-family:"Fraunces",serif;font-size:1.6rem;font-weight:700;
+  color:var(--ink);margin-bottom:.4rem;}
+.kicked-sub,.closed-sub{font-size:.95rem;color:var(--ink-light);font-weight:300;}
 
-/* ── NAME BADGE ── */
-.name-badge{display:inline-flex;align-items:center;gap:.5rem;
+/* NAME BADGE */
+.name-badge{display:inline-flex;align-items:center;gap:.45rem;
   background:var(--sage-mist);border:1px solid var(--sage-pale);
-  border-radius:var(--r-pill);padding:.4rem 1rem;
-  font-size:.88rem;font-weight:500;color:var(--ink-mid);margin-bottom:1rem;}
-.name-badge-dot{font-size:.7rem;color:var(--sage);}
+  border-radius:var(--r-pill);padding:.35rem .9rem;
+  font-size:.84rem;font-weight:500;color:var(--ink-mid);margin-bottom:.9rem;}
+.name-badge-dot{font-size:.65rem;color:var(--sage);}
 
-/* ── ACTIVITY FEED ── */
+/* ACTIVITY FEED */
 .activity-feed{background:var(--white);border:1px solid var(--border);
-  border-radius:var(--r-md);padding:1rem 1.2rem;max-height:240px;overflow-y:auto;
-  display:flex;flex-direction:column;gap:.45rem;}
+  border-radius:var(--r-md);padding:.9rem 1.1rem;max-height:220px;overflow-y:auto;
+  display:flex;flex-direction:column;gap:.4rem;}
 .activity-feed::-webkit-scrollbar{width:4px;}
 .activity-feed::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
-.activity-item{display:flex;gap:.6rem;align-items:flex-start;font-size:.85rem;
-  line-height:1.4;padding-bottom:.45rem;border-bottom:1px solid var(--border);}
+.activity-item{display:flex;gap:.55rem;align-items:flex-start;font-size:.82rem;
+  line-height:1.4;padding-bottom:.4rem;border-bottom:1px solid var(--border);}
 .activity-item:last-child{border-bottom:none;padding-bottom:0;}
-.activity-ts{font-size:.72rem;color:var(--ink-light);flex-shrink:0;margin-top:1px;}
+.activity-ts{font-size:.68rem;color:var(--ink-light);flex-shrink:0;margin-top:1px;}
 .activity-msg{color:var(--ink-mid);}
 .activity-msg strong{color:var(--ink);font-weight:600;}
-.activity-empty{font-size:.88rem;color:var(--ink-light);font-style:italic;padding:.3rem 0;}
+.activity-empty{font-size:.84rem;color:var(--ink-light);font-style:italic;padding:.25rem 0;}
 
-/* ── GUEST TABLE ── */
+/* GUEST TABLE */
 .guest-table{width:100%;border-collapse:collapse;}
-.guest-table th{font-size:.72rem;font-weight:700;text-transform:uppercase;
+.guest-table th{font-size:.68rem;font-weight:700;text-transform:uppercase;
   letter-spacing:.1em;color:var(--ink-light);background:var(--sage-mist);
-  border-bottom:1px solid var(--border);padding:.65rem 1rem;text-align:left;}
-.guest-table td{font-size:.92rem;padding:.65rem 1rem;
+  border-bottom:1px solid var(--border);padding:.55rem .9rem;text-align:left;}
+.guest-table td{font-size:.88rem;padding:.55rem .9rem;
   border-bottom:1px solid var(--border);vertical-align:middle;}
 .guest-table tr:last-child td{border-bottom:none;}
 
-/* ── TOP ANSWERS TABLE ── */
+/* TOP ANSWERS TABLE */
 .topans-table{width:100%;border-collapse:collapse;}
-.topans-table thead th{font-size:.72rem;font-weight:700;text-transform:uppercase;
+.topans-table thead th{font-size:.68rem;font-weight:700;text-transform:uppercase;
   letter-spacing:.1em;color:var(--ink-light);background:var(--sage-mist);
-  border-bottom:1px solid var(--border);padding:.75rem 1rem;text-align:left;}
+  border-bottom:1px solid var(--border);padding:.65rem .9rem;text-align:left;}
 .topans-table tbody tr:hover{background:var(--sage-mist);}
-.topans-table tbody td{font-size:.92rem;color:var(--ink);
-  padding:.75rem 1rem;border-bottom:1px solid var(--border);}
+.topans-table tbody td{font-size:.88rem;color:var(--ink);
+  padding:.65rem .9rem;border-bottom:1px solid var(--border);}
 .topans-table tbody tr:last-child td{border-bottom:none;}
 .rank-badge{display:inline-flex;align-items:center;justify-content:center;
-  width:26px;height:26px;border-radius:50%;
-  font-family:"Fraunces",serif;font-size:.85rem;font-weight:700;}
+  width:24px;height:24px;border-radius:50%;
+  font-family:"Fraunces",serif;font-size:.8rem;font-weight:700;}
 .rank-1{background:#fdf3d0;color:#b8860b;}
 .rank-2{background:#f0f0f0;color:#666;}
 .rank-3{background:#fde8d8;color:#c06020;}
-.rank-n{background:var(--sage-mist);color:var(--ink-light);font-size:.75rem;}
-.mini-bar-wrap{width:90px;height:8px;background:var(--cream-dark);border-radius:4px;overflow:hidden;}
+.rank-n{background:var(--sage-mist);color:var(--ink-light);font-size:.72rem;}
+.mini-bar-wrap{width:80px;height:7px;background:var(--cream-dark);border-radius:4px;overflow:hidden;}
 .mini-bar{height:100%;background:linear-gradient(90deg,var(--sage),var(--sage-light));
   border-radius:4px;transition:width .6s ease;}
 
-/* ── DT overrides ── */
+/* DT overrides */
 table.dataTable{font-family:"Figtree",sans-serif!important;border-collapse:collapse!important;}
-table.dataTable thead th{font-size:.75rem!important;font-weight:700!important;
+table.dataTable thead th{font-size:.72rem!important;font-weight:700!important;
   text-transform:uppercase!important;letter-spacing:.1em!important;
   color:var(--ink-light)!important;background:var(--sage-mist)!important;
-  border-bottom:1px solid var(--border)!important;padding:.75rem 1rem!important;}
-table.dataTable tbody td{font-size:.95rem!important;padding:.75rem 1rem!important;
+  border-bottom:1px solid var(--border)!important;padding:.65rem .9rem!important;}
+table.dataTable tbody td{font-size:.9rem!important;padding:.65rem .9rem!important;
   border-bottom:1px solid var(--border)!important;}
 table.dataTable tbody tr:hover{background:var(--sage-mist)!important;}
 .dataTables_wrapper{padding:0!important;}
 .dataTables_wrapper .dataTables_info,.dataTables_wrapper .dataTables_paginate{
-  font-size:.82rem!important;font-family:"Figtree",sans-serif!important;
-  color:var(--ink-light)!important;padding:.75rem 0!important;}
+  font-size:.78rem!important;font-family:"Figtree",sans-serif!important;
+  color:var(--ink-light)!important;padding:.65rem 0!important;}
 
-/* ── SELECTIZE ── */
+/* SELECTIZE */
 .selectize-input{border:1.5px solid var(--border)!important;border-radius:var(--r-sm)!important;
-  font-family:"Figtree",sans-serif!important;font-size:1rem!important;
-  color:var(--ink)!important;padding:.65rem .95rem!important;
+  font-family:"Figtree",sans-serif!important;font-size:.95rem!important;
+  color:var(--ink)!important;padding:.55rem .85rem!important;
   box-shadow:none!important;background:var(--white)!important;}
 .selectize-input:focus-within{border-color:var(--sage)!important;
-  box-shadow:0 0 0 3px rgba(122,171,133,.2)!important;}
-.selectize-dropdown{font-family:"Figtree",sans-serif!important;font-size:.95rem!important;
+  box-shadow:0 0 0 3px rgba(122,171,133,.18)!important;}
+.selectize-dropdown{font-family:"Figtree",sans-serif!important;font-size:.9rem!important;
   border-radius:var(--r-sm)!important;border:1.5px solid var(--border)!important;
   box-shadow:var(--sh-md)!important;}
 .selectize-dropdown .option:hover,.selectize-dropdown .option.active{
   background:var(--sage-mist)!important;color:var(--ink)!important;}
 .topbar-sel .selectize-input{border-radius:999px!important;
-  padding:.38rem 1.1rem!important;font-size:.88rem!important;font-weight:600!important;}
+  padding:.32rem 1rem!important;font-size:.84rem!important;font-weight:600!important;}
 
-/* ── MISC ── */
+/* MISC */
 .well{background:transparent!important;border:none!important;
   box-shadow:none!important;padding:0!important;}
-.checkbox label{font-size:.95rem!important;font-weight:400!important;
+.checkbox label{font-size:.9rem!important;font-weight:400!important;
   text-transform:none!important;letter-spacing:0!important;color:var(--ink-mid)!important;}
-input[type="checkbox"]{accent-color:var(--sage);transform:scale(1.2);}
-.shiny-notification{font-family:"Figtree",sans-serif!important;font-size:.92rem!important;
+input[type="checkbox"]{accent-color:var(--sage);transform:scale(1.15);}
+.shiny-notification{font-family:"Figtree",sans-serif!important;font-size:.88rem!important;
   border-radius:var(--r-md)!important;border-left:4px solid var(--sage)!important;}
 
-/* ── FOOTER ── */
-.chorus-foot{text-align:center;padding:2.5rem 2rem;border-top:1px solid var(--border);
-  margin-top:2rem;font-size:.85rem;color:var(--ink-light);font-weight:300;}
+/* FOOTER */
+.chorus-foot{text-align:center;padding:2rem;border-top:1px solid var(--border);
+  margin-top:2rem;font-size:.8rem;color:var(--ink-light);font-weight:300;}
 .chorus-foot a{color:var(--sage);text-decoration:none;font-weight:600;}
 .chorus-foot a:hover{text-decoration:underline;}
-.foot-note{margin-top:.6rem;font-size:.75rem;background:var(--sage-mist);
-  border-radius:99px;padding:.38rem 1.1rem;display:inline-block;}
+.foot-note{margin-top:.5rem;font-size:.7rem;background:var(--sage-mist);
+  border-radius:99px;padding:.32rem 1rem;display:inline-block;}
 
-@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
 
-/* ── TIMER ── */
-.timer-wrap{margin-bottom:1.2rem;}
-.timer-bar-bg{height:8px;background:var(--cream-dark);border-radius:4px;overflow:hidden;margin-bottom:.5rem;}
+/* TIMER */
+.timer-wrap{margin-bottom:1rem;}
+.timer-bar-bg{height:7px;background:var(--cream-dark);border-radius:4px;overflow:hidden;margin-bottom:.4rem;}
 .timer-bar{height:100%;border-radius:4px;transition:width 1s linear,background .5s ease;}
 .timer-bar.ok{background:linear-gradient(90deg,var(--sage),var(--sage-light));}
 .timer-bar.warn{background:linear-gradient(90deg,#e8a020,#f0c050);}
 .timer-bar.urgent{background:linear-gradient(90deg,var(--red-soft),#e07060);}
-.timer-lbl{font-size:.8rem;font-weight:700;color:var(--ink-mid);display:flex;justify-content:space-between;align-items:center;}
-.timer-lbl .t-badge{font-family:"Fraunces",serif;font-size:1rem;letter-spacing:.04em;}
-.timer-lbl .t-state{font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-light);}
-.timer-expired{font-size:.88rem;font-weight:600;color:var(--red-soft);
+.timer-lbl{font-size:.76rem;font-weight:700;color:var(--ink-mid);display:flex;justify-content:space-between;align-items:center;}
+.timer-lbl .t-badge{font-family:"Fraunces",serif;font-size:.95rem;letter-spacing:.04em;}
+.timer-lbl .t-state{font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-light);}
+.timer-expired{font-size:.84rem;font-weight:600;color:var(--red-soft);
   background:var(--red-mist);border:1px solid rgba(192,84,74,.2);
-  border-radius:var(--r-sm);padding:.5rem 1rem;margin-bottom:1rem;}
+  border-radius:var(--r-sm);padding:.45rem .9rem;margin-bottom:.9rem;}
 
-/* ── ANON / BLIND MODE BADGES ── */
-.mode-badge{display:inline-flex;align-items:center;gap:.35rem;
-  padding:.28rem .75rem;border-radius:var(--r-pill);
-  font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;}
+/* MODE BADGES */
+.mode-badge{display:inline-flex;align-items:center;gap:.3rem;
+  padding:.24rem .68rem;border-radius:var(--r-pill);
+  font-size:.66rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;}
 .mode-badge.anon{background:#ede8f8;color:#6040a0;border:1px solid #c8b8e8;}
 .mode-badge.blind{background:#fdf3d0;color:#9a6800;border:1px solid #e8d070;}
 
-/* ── BLIND VOTE CARD (no counts shown) ── */
+/* BLIND MODE */
 .answer-card.blind-mode .vote-count{display:none;}
 .answer-card.blind-mode .answer-bar-bg{display:none!important;}
 .answer-card.blind-mode .answer-meta .vote-pct{display:none;}
 
-/* ── MY VOTE COUNT (always visible) ── */
-.my-vote-count{font-family:"Fraunces",serif;font-size:.82rem;font-weight:700;
+/* MY VOTE COUNT */
+.my-vote-count{font-family:"Fraunces",serif;font-size:.78rem;font-weight:700;
   color:var(--sage-d);background:var(--sage-mist);border:1px solid var(--sage-pale);
-  border-radius:var(--r-pill);padding:.15rem .55rem;min-width:1.6rem;text-align:center;}
+  border-radius:var(--r-pill);padding:.12rem .5rem;min-width:1.5rem;text-align:center;}
 
-/* ── ROOM CLOSED SCREEN ── */
-.closed-screen{text-align:center;padding:4rem 2rem;animation:fadeUp .4s ease both;}
-.closed-icon{font-size:3rem;margin-bottom:1rem;}
-.closed-title{font-family:"Fraunces",serif;font-size:1.8rem;font-weight:700;
-  color:var(--ink);margin-bottom:.5rem;}
-.closed-sub{font-size:1rem;color:var(--ink-light);font-weight:300;}
+/* CLOSE ROOM */
 .btn-close-room{background:var(--red-mist)!important;color:var(--red-soft)!important;
-  border:1.5px solid rgba(192,84,74,.3)!important;}
-.btn-close-room:hover{background:rgba(192,84,74,.18)!important;}
+  border:1.5px solid rgba(192,84,74,.25)!important;position:relative!important;z-index:2!important;}
+.btn-close-room:hover{background:rgba(192,84,74,.16)!important;}
+
+/* INLINE SECTION HEADER */
+.inline-section{display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:.75rem;}
+
+
+.q-header{margin-bottom:.75rem;}
+.q-header .sec-eye{margin-bottom:.2rem;}
 '
 
 ui <- fluidPage(
@@ -521,25 +546,39 @@ $(document).on('shiny:value', function(e) {
       e.name === 'question_ui_guest' || e.name === 'guest_vote_budget_ui' ||
       e.name === 'guest_timer_ui' || e.name === 'guest_mode_badges_ui') {
     var el = document.getElementById('answer_text');
-    if (el) { el._savedVal = el.value; }
+    if (el && !el._justSubmitted) { el._savedVal = el.value; }
   }
   if (e.name === 'question_ui_admin' || e.name === 'lock_toggle_ui') {
     var el2 = document.getElementById('admin_answer_text');
-    if (el2) { el2._savedVal = el2.value; }
+    if (el2 && !el2._justSubmitted) { el2._savedVal = el2.value; }
   }
 });
 $(document).on('shiny:visualchange', function(e) {
   var el = document.getElementById('answer_text');
   if (el && el._savedVal !== undefined && el.value !== el._savedVal) {
-    el.value = el._savedVal;
-    el._savedVal = undefined;
+    el.value = el._savedVal; el._savedVal = undefined;
   }
   var el2 = document.getElementById('admin_answer_text');
   if (el2 && el2._savedVal !== undefined && el2.value !== el2._savedVal) {
-    el2.value = el2._savedVal;
-    el2._savedVal = undefined;
+    el2.value = el2._savedVal; el2._savedVal = undefined;
   }
 });
+Shiny.addCustomMessageHandler('clearAnswerInput', function(msg) {
+  var el = document.getElementById('answer_text');
+  if (el) {
+    el._justSubmitted = true; el._savedVal = undefined; el.value = '';
+    setTimeout(function() { el._justSubmitted = false; }, 2000);
+  }
+});
+function showTab(id) {
+  document.querySelectorAll('.tab-panel').forEach(function(p){ p.classList.remove('active'); });
+  document.querySelectorAll('.atab').forEach(function(t){ t.classList.remove('active'); });
+  var panel = document.getElementById('tab-' + id);
+  if (panel) panel.classList.add('active');
+  var btn = document.querySelector('[data-tab=\"' + id + '\"]');
+  if (btn) btn.classList.add('active');
+}
+$(document).ready(function(){ showTab('settings'); });
     "))
   ),
   
@@ -552,7 +591,7 @@ $(document).on('shiny:visualchange', function(e) {
                     tags$span(class = "role-lbl", "I am a"),
                     tags$div(class = "topbar-sel",
                              selectInput("user_role", label = NULL,
-                                         choices = c("Guest", "Admin"), selected = "Guest", width = "150px")
+                                         choices = c("Guest", "Admin"), selected = "Guest", width = "140px")
                     )
            )
   ),
@@ -560,8 +599,11 @@ $(document).on('shiny:visualchange', function(e) {
   tags$div(class = "chorus-wrap",
            
            tags$div(class = "hero",
-                    tags$div(class = "eyebrow", "Participative  Live"),
-                    tags$h1(class = "hero-title", "Every voice", tags$br(), tags$em("counts."))
+                    tags$div(class = "hero-left",
+                             tags$div(class = "eyebrow", "Live Polling"),
+                             tags$h1(class = "hero-title", "Every voice ", tags$em("counts."))
+                    ),
+                    uiOutput("hero_status_ui")
            ),
            
            conditionalPanel("input.user_role == 'Guest'",
@@ -569,16 +611,22 @@ $(document).on('shiny:visualchange', function(e) {
                             conditionalPanel("!output.validGuestConf",
                                              tags$div(class = "pcard",
                                                       tags$div(class = "pcard-title", "Join a session"),
-                                                      tags$div(class = "pcard-sub", "Enter the token your organizer shared."),
+                                                      tags$div(class = "pcard-sub", "Enter the token your organizer shared with you."),
                                                       tags$ul(class = "steps",
                                                               tags$li(tags$span(class="step-n","1"), "Get the 4-character token from your organizer"),
                                                               tags$li(tags$span(class="step-n","2"), "Optionally enter your name, others will see it"),
                                                               tags$li(tags$span(class="step-n","3"), "Vote, suggest answers, and watch results live")
                                                       ),
-                                                      tags$div(class = "token-input",
-                                                               textInput("guest_token_input", "Access Token", placeholder = "")),
-                                                      textInput("guest_name_input", "Your name (optional)", placeholder = ""),
-                                                      actionButton("guest_enter", "Join Room", class = "btn btn-sage")
+                                                      tags$div(class = "admin-grid",
+                                                               tags$div(
+                                                                 tags$div(class = "token-input",
+                                                                          textInput("guest_token_input", "Access Token", placeholder = ""))
+                                                               ),
+                                                               tags$div(
+                                                                 textInput("guest_name_input", "Your name (optional)", placeholder = ""),
+                                                                 actionButton("guest_enter", "Join Room", class = "btn btn-sage")
+                                                               )
+                                                      )
                                              )
                             ),
                             
@@ -587,27 +635,31 @@ $(document).on('shiny:visualchange', function(e) {
                                              conditionalPanel("!output.isRoomClosed",
                                                               uiOutput("kicked_ui"),
                                                               conditionalPanel("!output.isKicked",
-                                                                               uiOutput("guest_name_badge_ui"),
+                                                                               
                                                                                tags$div(class = "pcard",
-                                                                                        tags$div(class = "sec-eye", "Your identity"),
+                                                                                        tags$div(style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.9rem;flex-wrap:wrap;gap:.5rem;",
+                                                                                                 uiOutput("guest_name_badge_ui"),
+                                                                                                 uiOutput("user_count_ui_guest")
+                                                                                        ),
                                                                                         tags$div(class = "self-rename-row",
                                                                                                  textInput("self_rename_input", NULL, placeholder = "Change your display name..."),
                                                                                                  actionButton("self_rename_btn", "Update", class = "btn btn-ghost btn-sm",
                                                                                                               style = "margin-bottom:1rem;")
-                                                                                        )
-                                                                               ),
-                                                                               uiOutput("user_count_ui_guest"),
-                                                                               tags$div(class = "pcard",
-                                                                                        tags$div(class = "sec-eye", "Active Question"),
-                                                                                        uiOutput("question_ui_guest"),
-                                                                                        uiOutput("guest_mode_badges_ui"),
-                                                                                        uiOutput("guest_timer_ui"),
+                                                                                        ),
                                                                                         tags$div(class = "div"),
+                                                                                        tags$div(class = "q-header",
+                                                                                                 tags$div(class = "sec-eye", "Active Question"),
+                                                                                                 uiOutput("question_ui_guest")
+                                                                                        ),
+                                                                                        tags$div(style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.6rem;",
+                                                                                                 uiOutput("guest_mode_badges_ui")
+                                                                                        ),
+                                                                                        uiOutput("guest_timer_ui"),
                                                                                         uiOutput("guest_vote_budget_ui"),
                                                                                         uiOutput("guest_suggest_lock_ui"),
                                                                                         tags$div(id = "answer_input_wrap",
                                                                                                  tags$div(class="sec-eye", "Suggest an answer"),
-                                                                                                 tags$div(style="display:flex;gap:.75rem;align-items:flex-end;",
+                                                                                                 tags$div(style="display:flex;gap:.6rem;align-items:flex-end;",
                                                                                                           tags$div(style="flex:1;",
                                                                                                                    textInput("answer_text", NULL, placeholder="Type your answer...")),
                                                                                                           actionButton("submit_answer", "Submit", class="btn btn-sage",
@@ -616,9 +668,10 @@ $(document).on('shiny:visualchange', function(e) {
                                                                                         ),
                                                                                         uiOutput("guest_answer_section")
                                                                                ),
+                                                                               
                                                                                tags$div(class = "pcard",
-                                                                                        tags$div(class = "sec-eye", "Live Activity"),
-                                                                                        tags$div(class = "pcard-title", style = "margin-bottom:.75rem;", "What's happening"),
+                                                                                        tags$div(class = "sec-eye", "Activity"),
+                                                                                        tags$div(class = "pcard-title", style="margin-bottom:.65rem;", "What's happening"),
                                                                                         uiOutput("activity_feed_guest")
                                                                                )
                                                               )
@@ -631,67 +684,160 @@ $(document).on('shiny:visualchange', function(e) {
                             conditionalPanel("!output.isAdmin",
                                              tags$div(class = "pcard",
                                                       tags$div(class = "pcard-title", "Create or resume a room"),
-                                                      tags$div(class = "pcard-sub", "Start fresh or re-enter your admin key to resume after a reload."),
-                                                      tags$ul(class = "steps",
-                                                              tags$li(tags$span(class="step-n","1"), "Enter a conference ID to create a new room"),
-                                                              tags$li(tags$span(class="step-n","2"), "Or paste your Admin Key to resume an existing room"),
-                                                              tags$li(tags$span(class="step-n","3"), "Share the room token with attendees and start polling")
-                                                      ),
-                                                      textInput("new_conf_id", "Conference ID (new room)", placeholder = "e.g. SciConf2025"),
-                                                      actionButton("create_conf", "Create Room", class = "btn btn-sage"),
-                                                      tags$div(class = "div"),
-                                                      textInput("resume_key_input", "Admin Key (resume existing room)", placeholder = "Paste your admin key"),
-                                                      actionButton("resume_conf", "Resume Room", class = "btn btn-ghost")
+                                                      tags$div(class = "pcard-sub", "Start fresh or re-enter your admin key to resume."),
+                                                      tags$div(class = "admin-grid",
+                                                               tags$div(
+                                                                 tags$div(class = "sec-eye", "New room"),
+                                                                 tags$ul(class = "steps",
+                                                                         tags$li(tags$span(class="step-n","1"), "Enter a conference ID"),
+                                                                         tags$li(tags$span(class="step-n","2"), "Share the token with attendees"),
+                                                                         tags$li(tags$span(class="step-n","3"), "Start polling")
+                                                                 ),
+                                                                 textInput("new_conf_id", "Conference ID", placeholder = "e.g. SciConf2025"),
+                                                                 actionButton("create_conf", "Create Room", class = "btn btn-sage")
+                                                               ),
+                                                               tags$div(
+                                                                 tags$div(class = "sec-eye", "Resume existing room"),
+                                                                 tags$br(),
+                                                                 tags$p(style="font-size:.88rem;color:var(--ink-light);margin-bottom:1rem;",
+                                                                        "Paste your Admin Key to reclaim your room after a page reload."),
+                                                                 textInput("resume_key_input", "Admin Key", placeholder = "Paste your admin key"),
+                                                                 actionButton("resume_conf", "Resume Room", class = "btn btn-ghost")
+                                                               )
+                                                      )
                                              )
                             ),
                             
                             conditionalPanel("output.isAdmin",
                                              uiOutput("admin_token_display"),
                                              uiOutput("user_count_ui"),
-                                             tags$div(style="margin-bottom:1.4rem;display:flex;justify-content:flex-end;",
-                                                      actionButton("close_room", "Close Room", class = "btn btn-close-room btn-sm")
+                                             
+                                             tags$div(class = "admin-tabs",
+                                                      tags$button(class = "atab active", "data-tab" = "settings",
+                                                                  onclick = "showTab('settings')", "Settings"),
+                                                      tags$button(class = "atab", "data-tab" = "questions",
+                                                                  onclick = "showTab('questions')", "Questions"),
+                                                      tags$button(class = "atab", "data-tab" = "room",
+                                                                  onclick = "showTab('room')", "Room"),
+                                                      tags$button(class = "atab", "data-tab" = "guests",
+                                                                  onclick = "showTab('guests')", "Guests"),
+                                                      tags$button(class = "atab", "data-tab" = "export",
+                                                                  onclick = "showTab('export')", "Export")
                                              ),
-                                             tags$div(class = "pcard",
-                                                      tags$div(class = "sec-eye", "Navigation"),
-                                                      tags$div(class = "pcard-title", "Send all guests to a question"),
-                                                      tags$p(style="font-size:.9rem;color:var(--ink-light);margin-bottom:.75rem;",
-                                                             "Navigate all guests to a specific question immediately."),
-                                                      tags$div(style="display:flex;gap:.75rem;align-items:flex-end;",
-                                                               tags$div(style="flex:1;",
-                                                                        uiOutput("force_q_selector_ui")),
-                                                               tags$div(style="display:flex;gap:.5rem;margin-bottom:1rem;flex-shrink:0;",
-                                                                        actionButton("force_question", "Force", class = "btn btn-ink btn-sm"),
-                                                                        actionButton("release_force",  "Release", class = "btn btn-ghost btn-sm")
-                                                               )
+                                             
+                                             tags$div(id = "tab-room", class = "tab-panel",
+                                                      
+                                                      tags$div(class = "pcard",
+                                                               tags$div(class = "inline-section",
+                                                                        tags$div(
+                                                                          tags$div(class = "sec-eye", "Active Question"),
+                                                                          uiOutput("question_ui_admin")
+                                                                        ),
+                                                                        tags$div(style="display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap;",
+                                                                                 actionButton("force_question", "Send to all", class = "btn btn-ink btn-sm"),
+                                                                                 actionButton("release_force",  "Release",     class = "btn btn-ghost btn-sm")
+                                                                        )
+                                                               ),
+                                                               tags$div(class = "div"),
+                                                               tags$div(class = "admin-grid",
+                                                                        tags$div(
+                                                                          tags$div(class = "sec-eye", "Add answer"),
+                                                                          tags$div(style="display:flex;gap:.6rem;align-items:flex-end;",
+                                                                                   tags$div(style="flex:1;",
+                                                                                            textInput("admin_answer_text", label = NULL,
+                                                                                                      placeholder = "Add an answer for this question...")),
+                                                                                   actionButton("admin_submit_answer", "Add", class = "btn btn-ink",
+                                                                                                style = "margin-bottom:1rem;flex-shrink:0;")
+                                                                          )
+                                                                        ),
+                                                                        tags$div(
+                                                                          tags$div(class = "sec-eye", "Guest suggestions"),
+                                                                          uiOutput("lock_toggle_ui"),
+                                                                          tags$p(style="font-size:.78rem;color:var(--ink-light);margin-top:.4rem;",
+                                                                                 "When locked, guests can vote but cannot add new answers.")
+                                                                        )
+                                                               ),
+                                                               tags$div(class = "div"),
+                                                               tags$div(class = "sec-eye", "Timer"),
+                                                               tags$div(style="display:flex;gap:.6rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:.6rem;",
+                                                                        numericInput("timer_duration", label = NULL, value = 60, min = 5, max = 3600, width = "80px"),
+                                                                        tags$span(style="font-size:.84rem;color:var(--ink-light);margin-bottom:1rem;", "seconds"),
+                                                                        tags$div(style="display:flex;gap:.4rem;margin-bottom:1rem;",
+                                                                                 actionButton("timer_start", "Start", class = "btn btn-sage btn-sm"),
+                                                                                 actionButton("timer_stop",  "Stop",  class = "btn btn-ghost btn-sm"),
+                                                                                 actionButton("timer_reset", "Reset", class = "btn btn-ghost btn-sm")
+                                                                        )
+                                                               ),
+                                                               uiOutput("admin_timer_ui"),
+                                                               tags$div(class = "div"),
+                                                               DTOutput("admin_table"),
+                                                               tags$p(style="font-size:.75rem;color:var(--ink-light);margin-top:.5rem;",
+                                                                      "Delete an answer. Votes are automatically refunded to guests.")
+                                                      ),
+                                                      
+                                                      tags$div(class = "pcard",
+                                                               tags$div(class = "sec-eye", "Activity"),
+                                                               tags$div(class = "pcard-title", style="margin-bottom:.65rem;", "Room activity"),
+                                                               uiOutput("activity_feed_admin")
                                                       )
                                              ),
                                              
-                                             tags$div(class = "admin-grid",
-                                                      tags$div(class = "pcard",
-                                                               tags$div(class = "sec-eye", "Questions"),
-                                                               tags$div(class = "pcard-title", "Manage questions"),
-                                                               tags$div(class = "div"),
-                                                               textInput("new_question_text", "New question", placeholder = "Ask something..."),
-                                                               actionButton("add_question", "Add", class = "btn btn-sage"),
-                                                               tags$div(class = "div"),
-                                                               selectInput("delete_question_id", "Delete question", choices = NULL),
-                                                               actionButton("delete_question", "Delete", class = "btn btn-ghost"),
-                                                               tags$br(), tags$br(),
-                                                               selectInput("restart_question_id", "Reset responses for", choices = NULL),
-                                                               actionButton("restart_question", "Reset", class = "btn btn-ghost")
+                                             tags$div(id = "tab-questions", class = "tab-panel",
+                                                      tags$div(class = "admin-grid",
+                                                               tags$div(class = "pcard",
+                                                                        tags$div(class = "sec-eye", "Add"),
+                                                                        tags$div(class = "pcard-title", "New question"),
+                                                                        tags$div(class = "div"),
+                                                                        textInput("new_question_text", "Question text", placeholder = "Ask something..."),
+                                                                        actionButton("add_question", "Add Question", class = "btn btn-sage")
+                                                               ),
+                                                               tags$div(class = "pcard",
+                                                                        tags$div(class = "sec-eye", "Manage"),
+                                                                        tags$div(class = "pcard-title", "Edit or reset"),
+                                                                        tags$div(class = "div"),
+                                                                        selectInput("delete_question_id", "Delete question", choices = NULL),
+                                                                        actionButton("delete_question", "Delete", class = "btn btn-ghost"),
+                                                                        tags$div(class = "div"),
+                                                                        selectInput("restart_question_id", "Reset responses for", choices = NULL),
+                                                                        actionButton("restart_question", "Reset responses", class = "btn btn-ghost")
+                                                               )
                                                       ),
                                                       tags$div(class = "pcard",
-                                                               tags$div(class = "sec-eye", "Settings"),
-                                                               tags$div(class = "pcard-title", "Voting rules"),
-                                                               tags$p(style="font-size:.82rem;color:var(--sage-d);margin-bottom:1rem;",
-                                                                      "Changes apply instantly to all guests. No save needed."),
+                                                               tags$div(class = "sec-eye", "Summary"),
+                                                               tags$div(class = "pcard-title", "Top answers across all questions"),
+                                                               tags$div(style="display:flex;align-items:center;gap:.8rem;margin:.65rem 0 1rem;",
+                                                                        tags$span(style="font-size:.88rem;color:var(--ink-light);","Show top"),
+                                                                        numericInput("top_n", label = NULL, value = 5, min = 1, max = 50, width = "80px"),
+                                                                        tags$span(style="font-size:.88rem;color:var(--ink-light);","answers")
+                                                               ),
+                                                               uiOutput("top_answers_ui")
+                                                      )
+                                             ),
+                                             
+                                             tags$div(id = "tab-settings", class = "tab-panel active",
+                                                      tags$div(class = "pcard",
+                                                               tags$div(class = "pcard-title", "Session settings"),
+                                                               tags$p(style="font-size:.84rem;color:var(--sage-d);margin-bottom:1rem;",
+                                                                      "Changes apply instantly to all guests."),
+                                                               tags$div(class = "admin-grid",
+                                                                        tags$div(
+                                                                          tags$div(class = "sec-eye", "Vote limits"),
+                                                                          tags$div(class = "div"),
+                                                                          uiOutput("setting_total_ui"),
+                                                                          tags$br(),
+                                                                          uiOutput("setting_per_q_ui")
+                                                                        ),
+                                                                        tags$div(
+                                                                          tags$div(class = "sec-eye", "Answer submission limits"),
+                                                                          tags$div(class = "div"),
+                                                                          uiOutput("setting_ans_per_q_ui"),
+                                                                          tags$br(),
+                                                                          uiOutput("setting_ans_total_ui")
+                                                                        )
+                                                               ),
                                                                tags$div(class = "div"),
-                                                               uiOutput("setting_total_ui"),
-                                                               tags$br(),
-                                                               uiOutput("setting_per_q_ui"),
-                                                               tags$div(class = "div"),
-                                                               tags$div(class = "sec-eye", "Privacy and transparency"),
-                                                               tags$div(style="display:flex;flex-direction:column;gap:.6rem;margin-top:.4rem;",
+                                                               tags$div(class = "sec-eye", "Privacy"),
+                                                               tags$div(style="display:flex;flex-direction:column;gap:.5rem;margin-top:.4rem;",
                                                                         checkboxInput("setting_anonymous",
                                                                                       tags$span("Anonymous mode: hide names in guest activity feed"),
                                                                                       value = FALSE),
@@ -702,76 +848,20 @@ $(document).on('shiny:visualchange', function(e) {
                                                       )
                                              ),
                                              
-                                             tags$div(class = "pcard",
-                                                      tags$div(class = "sec-eye", "Live Results"),
-                                                      tags$div(class = "pcard-title", style = "margin-bottom:.75rem;", "Question breakdown"),
-                                                      uiOutput("question_ui_admin"),
-                                                      tags$div(class = "div"),
-                                                      tags$div(class = "admin-grid", style = "margin-bottom:1rem;",
-                                                               tags$div(
-                                                                 tags$div(class = "sec-eye", "Suggest an answer"),
-                                                                 tags$div(style="display:flex;gap:.7rem;align-items:flex-end;",
-                                                                          tags$div(style="flex:1;",
-                                                                                   textInput("admin_answer_text", label = NULL,
-                                                                                             placeholder = "Add an answer for this question...")),
-                                                                          actionButton("admin_submit_answer", "Add", class = "btn btn-ink",
-                                                                                       style = "margin-bottom:1rem;flex-shrink:0;")
-                                                                 )
-                                                               ),
-                                                               tags$div(
-                                                                 tags$div(class = "sec-eye", "Guest suggestions"),
-                                                                 uiOutput("lock_toggle_ui"),
-                                                                 tags$p(style="font-size:.82rem;color:var(--ink-light);margin-top:.5rem;",
-                                                                        "When locked, guests can vote but cannot add new answers.")
-                                                               )
-                                                      ),
-                                                      tags$div(class = "div"),
-                                                      tags$div(class = "sec-eye", "Question timer"),
-                                                      tags$div(style="display:flex;gap:.75rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:.75rem;",
-                                                               numericInput("timer_duration", label = NULL, value = 60, min = 5, max = 3600, width = "90px"),
-                                                               tags$span(style="font-size:.88rem;color:var(--ink-light);margin-bottom:1.1rem;", "seconds"),
-                                                               tags$div(style="display:flex;gap:.5rem;margin-bottom:1rem;",
-                                                                        actionButton("timer_start",  "▶ Start",  class = "btn btn-sage  btn-sm"),
-                                                                        actionButton("timer_stop",   "■ Stop",   class = "btn btn-ghost btn-sm"),
-                                                                        actionButton("timer_reset",  "↺ Reset",  class = "btn btn-ghost btn-sm")
-                                                               )
-                                                      ),
-                                                      uiOutput("admin_timer_ui"),
-                                                      tags$div(class = "div"),
-                                                      DTOutput("admin_table"),
-                                                      tags$p(style="font-size:.8rem;color:var(--ink-light);margin-top:.6rem;",
-                                                             "Delete an answer. Votes are automatically refunded to guests.")
+                                             tags$div(id = "tab-guests", class = "tab-panel",
+                                                      tags$div(class = "pcard",
+                                                               tags$div(class = "pcard-title", style="margin-bottom:.75rem;", "Manage guests"),
+                                                               uiOutput("guest_mgmt_ui")
+                                                      )
                                              ),
                                              
-                                             tags$div(class = "pcard",
-                                                      tags$div(class = "sec-eye", "Cross-Question Summary"),
-                                                      tags$div(class = "pcard-title", "Top answers across all questions"),
-                                                      tags$div(style="display:flex;align-items:center;gap:1rem;margin:.75rem 0 1.2rem;",
-                                                               tags$span(style="font-size:.9rem;color:var(--ink-light);","Show top"),
-                                                               numericInput("top_n", label = NULL, value = 5, min = 1, max = 50, width = "90px"),
-                                                               tags$span(style="font-size:.9rem;color:var(--ink-light);","answers")
-                                                      ),
-                                                      uiOutput("top_answers_ui")
-                                             ),
-                                             
-                                             tags$div(class = "pcard",
-                                                      tags$div(class = "sec-eye", "Attendees"),
-                                                      tags$div(class = "pcard-title", style = "margin-bottom:.75rem;", "Manage guests"),
-                                                      uiOutput("guest_mgmt_ui")
-                                             ),
-                                             
-                                             tags$div(class = "pcard",
-                                                      tags$div(class = "sec-eye", "Export"),
-                                                      tags$div(class = "pcard-title", "Download session data"),
-                                                      tags$p(style="font-size:.92rem;color:var(--ink-light);margin-bottom:1.2rem;",
-                                                             "Export all questions and responses as a CSV file."),
-                                                      downloadButton("export_csv", "Download CSV", class = "btn btn-ink")
-                                             ),
-                                             
-                                             tags$div(class = "pcard",
-                                                      tags$div(class = "sec-eye", "Live Activity"),
-                                                      tags$div(class = "pcard-title", style = "margin-bottom:.75rem;", "Room activity"),
-                                                      uiOutput("activity_feed_admin")
+                                             tags$div(id = "tab-export", class = "tab-panel",
+                                                      tags$div(class = "pcard",
+                                                               tags$div(class = "pcard-title", "Export session data"),
+                                                               tags$p(style="font-size:.88rem;color:var(--ink-light);margin:.5rem 0 1.2rem;",
+                                                                      "Download all questions and responses as a CSV file."),
+                                                               downloadButton("export_csv", "Download CSV", class = "btn btn-ink")
+                                                      )
                                              )
                             )
            )
@@ -786,7 +876,7 @@ $(document).on('shiny:visualchange', function(e) {
            ),
            tags$p("Concept by ",
                   tags$a("Dr. Heidi Steiner", href = "https://heidiesteiner.netlify.app/", target = "_blank")),
-           tags$div(class = "foot-note", "✦ No data stored permanently unless you export before closing")
+           tags$div(class = "foot-note", "\u2726 No data stored permanently unless you export before closing")
   )
 )
 
@@ -821,7 +911,7 @@ server <- function(input, output, session) {
     cid <- guest_cid(); if (is.null(cid)) return()
     if (isTRUE(get_kick_trig(sid)())) { is_kicked(TRUE); return() }
     e <- get_conf(cid)
-    if (!is.null(e) && isTRUE(e$room_closed)) { is_room_closed(TRUE); return() }
+    if (is.null(e) || isTRUE(e$room_closed)) { is_room_closed(TRUE); return() }
     gl <- list_guests(cid)
     if (!is.null(gl[[sid]])) {
       stored_nm <- gl[[sid]]$name
@@ -840,7 +930,6 @@ server <- function(input, output, session) {
   output$kicked_ui <- renderUI({
     if (!is_kicked()) return(NULL)
     tags$div(class = "kicked-screen",
-             tags$div(class = "kicked-icon", "🎵"),
              tags$div(class = "kicked-title", "You've been removed"),
              tags$div(class = "kicked-sub",
                       "The organizer has ended your session. Thank you for participating in Chorus.")
@@ -850,7 +939,6 @@ server <- function(input, output, session) {
   output$room_closed_ui <- renderUI({
     if (!is_room_closed()) return(NULL)
     tags$div(class = "closed-screen",
-             tags$div(class = "closed-icon", "🎶"),
              tags$div(class = "closed-title", "This room has been closed"),
              tags$div(class = "closed-sub",
                       "The organizer has ended the session. Thank you for participating in Chorus.")
@@ -860,13 +948,31 @@ server <- function(input, output, session) {
   observeEvent(input$close_room, {
     cid <- admin_cid(); req(cid)
     e   <- get_conf(cid); req(e)
-    e$room_closed <- TRUE
+    
     gl <- list_guests(cid)
     for (gsid in names(gl)) get_kick_trig(gsid)(TRUE)
-    assign(cid, list(), envir = store$guests)
-    assign(cid, 0L,     envir = store$user_counts)
+    
+    token <- names(Filter(function(v) v == cid, as.list(store$tokens)))[1]
+    if (!is.null(token) && !is.na(token))
+      rm(list = token, envir = store$tokens)
+    
+    admin_key <- e$admin_key
+    if (exists(admin_key, envir = store$admin_keys, inherits = FALSE))
+      rm(list = admin_key, envir = store$admin_keys)
+    
+    all_ledger <- ls(store$vote_ledger)
+    prefix <- paste0(cid, "|")
+    to_rm  <- all_ledger[startsWith(all_ledger, prefix)]
+    if (length(to_rm) > 0) rm(list = to_rm, envir = store$vote_ledger)
+    
+    if (exists(cid, envir = store$activity_log,  inherits = FALSE)) rm(list = cid, envir = store$activity_log)
+    if (exists(cid, envir = store$guests,         inherits = FALSE)) rm(list = cid, envir = store$guests)
+    if (exists(cid, envir = store$user_counts,    inherits = FALSE)) rm(list = cid, envir = store$user_counts)
+    if (exists(cid, envir = store$conf_triggers,  inherits = FALSE)) rm(list = cid, envir = store$conf_triggers)
+    if (exists(cid, envir = store$conferences,    inherits = FALSE)) rm(list = cid, envir = store$conferences)
+    
     is_admin(FALSE); admin_cid(NULL)
-    showNotification("Room closed. All guests have been disconnected.")
+    showNotification("Room closed and all data removed.")
   })
   
   observeEvent(input$create_conf, {
@@ -897,15 +1003,21 @@ server <- function(input, output, session) {
     req(admin_cid())
     cid   <- admin_cid(); e <- get_conf(cid); req(e)
     token <- names(Filter(function(v) v == cid, as.list(store$tokens)))[1]
-    tags$div(class = "token-box",
-             tags$div(class = "token-lbl", "Share this token with attendees"),
-             tags$div(class = "token-val", token %||% ""),
-             tags$div(class = "token-hint", paste0("Room: ", cid, "  Anyone with this code can join")),
-             tags$div(class = "admin-key-box",
-                      tags$div(class = "admin-key-lbl", "Admin Key  save this to resume after a reload"),
-                      tags$div(class = "admin-key-val", e$admin_key),
-                      tags$div(class = "admin-key-hint",
-                               "Keep it private. Paste it in the resume box to reclaim this room.")
+    tags$div(class = "token-strip",
+             tags$div(class = "ts-left",
+                      tags$div(class = "ts-token-block",
+                               tags$div(class = "ts-room-lbl", "Share with attendees"),
+                               tags$div(class = "ts-token-val", token %||% ""),
+                               tags$div(class = "ts-hint", paste0("Room: ", cid))
+                      ),
+                      tags$div(class = "ts-key-block",
+                               tags$div(class = "ts-key-lbl", "Admin Key  save to resume"),
+                               tags$div(class = "ts-key-val", e$admin_key),
+                               tags$div(class = "ts-key-hint", "Keep private")
+                      )
+             ),
+             tags$div(class = "ts-right",
+                      actionButton("close_room", "Close Room", class = "btn btn-close-room btn-sm")
              )
     )
   })
@@ -962,6 +1074,18 @@ server <- function(input, output, session) {
     n <- get(cid, envir = store$user_counts, inherits = FALSE) %||% 0L
     tags$div(class = "status-bar", tags$div(class = "status-dot"),
              paste0(n, " attendee", if (n!=1)"s" else "", " in this room"))
+  })
+  output$hero_status_ui <- renderUI({
+    if (is_admin()) {
+      cid <- admin_cid(); if (is.null(cid)) return(NULL)
+      n <- get(cid, envir = store$user_counts, inherits = FALSE) %||% 0L
+      tags$div(class = "status-bar", tags$div(class = "status-dot"),
+               paste0(n, " online"))
+    } else if (!is.null(guest_cid())) {
+      n <- get(guest_cid(), envir = store$user_counts, inherits = FALSE) %||% 0L
+      tags$div(class = "status-bar", tags$div(class = "status-dot"),
+               paste0(n, " in room"))
+    } else NULL
   })
   output$guest_name_badge_ui <- renderUI({
     nm <- guest_name(); if (nchar(nm) == 0) return(NULL)
@@ -1072,6 +1196,66 @@ server <- function(input, output, session) {
     }
   }, ignoreInit = TRUE)
   
+  output$setting_ans_per_q_ui <- renderUI({
+    trig_a(); cid <- admin_cid(); req(cid)
+    e <- get_conf(cid); req(e); cur <- e$settings$max_answers_per_q
+    tagList(
+      tags$div(class="sec-eye","Max answers a guest can suggest per question"),
+      tags$div(class="limit-row",
+               checkboxInput("ans_per_q_unlimited","Unlimited", value=is.infinite(cur)),
+               if (!is.infinite(cur))
+                 numericInput("max_answers_per_q", label=NULL, value=cur, min=1, width="90px")
+               else
+                 tags$span(class="limit-badge unlimited","\u221e  No limit")
+      )
+    )
+  })
+  
+  output$setting_ans_total_ui <- renderUI({
+    trig_a(); cid <- admin_cid(); req(cid)
+    e <- get_conf(cid); req(e); cur <- e$settings$max_answers_total
+    tagList(
+      tags$div(class="sec-eye","Max answers a guest can suggest across all questions"),
+      tags$div(class="limit-row",
+               checkboxInput("ans_total_unlimited","Unlimited", value=is.infinite(cur)),
+               if (!is.infinite(cur))
+                 numericInput("max_answers_total", label=NULL, value=cur, min=1, width="90px")
+               else
+                 tags$span(class="limit-badge unlimited","\u221e  No limit")
+      )
+    )
+  })
+  
+  observeEvent(input$ans_per_q_unlimited, {
+    cid <- admin_cid(); req(cid); e <- get_conf(cid); req(e)
+    e$settings$max_answers_per_q <- if (isTRUE(input$ans_per_q_unlimited)) Inf
+    else max(1L, as.integer(input$max_answers_per_q %||% 1L))
+    bump(cid)
+  }, ignoreInit = TRUE)
+  
+  observeEvent(input$max_answers_per_q, {
+    cid <- admin_cid(); req(cid); e <- get_conf(cid); req(e)
+    if (!isTRUE(input$ans_per_q_unlimited) && !is.null(input$max_answers_per_q)) {
+      e$settings$max_answers_per_q <- max(1L, as.integer(input$max_answers_per_q))
+      bump(cid)
+    }
+  }, ignoreInit = TRUE)
+  
+  observeEvent(input$ans_total_unlimited, {
+    cid <- admin_cid(); req(cid); e <- get_conf(cid); req(e)
+    e$settings$max_answers_total <- if (isTRUE(input$ans_total_unlimited)) Inf
+    else max(1L, as.integer(input$max_answers_total %||% 5L))
+    bump(cid)
+  }, ignoreInit = TRUE)
+  
+  observeEvent(input$max_answers_total, {
+    cid <- admin_cid(); req(cid); e <- get_conf(cid); req(e)
+    if (!isTRUE(input$ans_total_unlimited) && !is.null(input$max_answers_total)) {
+      e$settings$max_answers_total <- max(1L, as.integer(input$max_answers_total))
+      bump(cid)
+    }
+  }, ignoreInit = TRUE)
+  
   observeEvent(input$setting_anonymous, {
     cid <- admin_cid(); req(cid); e <- get_conf(cid); req(e)
     e$settings$anonymous <- isTRUE(input$setting_anonymous)
@@ -1148,15 +1332,9 @@ server <- function(input, output, session) {
     make_timer_ui(q, admin = TRUE)
   })
   
-  output$force_q_selector_ui <- renderUI({
-    qs <- qs_a()
-    if (length(qs) == 0) return(tags$p(style="color:var(--ink-light);font-size:.9rem;","No questions yet."))
-    selectInput("force_q_select", label = NULL,
-                choices = setNames(names(qs), sapply(qs, `[[`, "text")))
-  })
   
   observeEvent(input$force_question, {
-    cid <- admin_cid(); qid <- input$force_q_select; req(cid, qid)
+    cid <- admin_cid(); qid <- input$question_id_admin; req(cid, qid)
     e   <- get_conf(cid); req(e)
     if (!exists(qid, envir = e$questions, inherits = FALSE)) return()
     q   <- get(qid, envir = e$questions, inherits = FALSE)
@@ -1623,7 +1801,29 @@ server <- function(input, output, session) {
     ans <- trimws(input$answer_text); req(cid, qid, nchar(ans)>0)
     e   <- get_conf(cid)
     q   <- get(qid, envir=e$questions, inherits=FALSE)
+    s   <- e$settings
     if (isTRUE(q$locked)) { showNotification("Suggestions are locked.",type="warning"); return() }
+    
+    ans_this_q <- sum(q$responses$Submitter == (if(nchar(guest_name())>0) guest_name() else "A guest") &
+                        !isTRUE(q$responses$IsAdmin), na.rm=TRUE)
+    all_keys   <- ls(store$vote_ledger)
+    ans_total  <- sum(sapply(ls(e$questions), function(qqid) {
+      qq <- get(qqid, envir=e$questions, inherits=FALSE)
+      nm_check <- if(nchar(guest_name())>0) guest_name() else "A guest"
+      sum(qq$responses$Submitter == nm_check & !isTRUE(qq$responses$IsAdmin), na.rm=TRUE)
+    }))
+    
+    max_apq <- s$max_answers_per_q %||% 1L
+    max_at  <- s$max_answers_total %||% Inf
+    if (!is.infinite(max_apq) && ans_this_q >= max_apq) {
+      showNotification(paste0("Answer limit reached for this question (", max_apq, " max)."), type="warning")
+      return()
+    }
+    if (!is.infinite(max_at) && ans_total >= max_at) {
+      showNotification(paste0("Total answer limit reached (", max_at, " across all questions)."), type="warning")
+      return()
+    }
+    
     new_id <- if (nrow(q$responses)==0) 1L else max(q$responses$ID)+1L
     nm <- guest_name(); if (nchar(nm)==0) nm <- "A guest"
     q$responses <- rbind(q$responses,
@@ -1631,6 +1831,7 @@ server <- function(input, output, session) {
                                     stringsAsFactors=FALSE))
     assign(qid, q, envir=e$questions)
     updateTextInput(session,"answer_text",value="")
+    session$sendCustomMessage("clearAnswerInput", list())
     add_activity(cid, paste0("<strong>",nm,"</strong> suggested: <em>",ans,"</em>"),
                  msg_anon = paste0("A new answer was suggested: <em>",ans,"</em>"))
     bump(cid)
