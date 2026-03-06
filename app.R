@@ -869,12 +869,12 @@ $(document).ready(function(){ showTab('settings'); });
   
   tags$div(class = "chorus-foot",
            tags$p("Chorus by ",
-                  tags$a("Dr. Cristian Román-Palacios · Data Diversity Lab, U of A",
+                  tags$a("Dr. Cristian Roman · Data Diversity Lab, U of A",
                          href = "https://datadiversitylab.github.io/", target = "_blank"),
                   "  ", tags$a("GitHub",
                                href = "https://github.com/datadiversitylab/chorus", target = "_blank")
            ),
-           tags$p("Concept by ",
+           tags$p("Early concept by ",
                   tags$a("Dr. Heidi Steiner", href = "https://heidiesteiner.netlify.app/", target = "_blank")),
            tags$div(class = "foot-note", "\u2726 No data stored permanently unless you export before closing")
   )
